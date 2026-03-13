@@ -1,0 +1,143 @@
+{
+	"spi-nor": { // Device, The name should be the same with string in image:info:media:type
+		"size": "2m",
+		"partitions": {
+			"spl": {"size": "64k" },
+			"pdata": {"size": "4k" },
+			"uploader": {"size": "256K" },
+			"app1": {"size": "1m" },
+		},
+	},
+	"image": {
+		"info": {
+			"platform": "m7000",
+			"product": "evm",
+			"version": "1.0.0",
+			"media": {
+				"type": "spi-nor",
+				"device_id": "0x100",
+			}
+		},
+		"target": {
+			"spl": {
+				"file": "bootloader.aic",
+				"attr": ["mtd", "required", "burn"],
+				"part": ["spl"]
+			},
+
+			"pdata": {
+				"file": "pdata.bin",
+				"attr": ["mtd", "optional", "burn"],
+				"part": ["pdata"]
+			},
+			
+			"uploader": {
+				"file": "uploader.aic",
+				"attr": ["mtd", "required", "burn"],
+				"part": ["uploader"]
+			},
+
+			"app1": {
+				"file": "application.aic",
+				"attr": ["mtd", "required", "burn"],
+				"part": ["app1"]
+			},
+		}
+	},
+	"pre-process": {
+		"aicimage": {
+		
+			"bootloader.aic": {
+				"head_ver": "0x00010001",
+				"anti-rollback counter": 0,
+				"upgmode-check" : 1,
+				
+				//for 1024K SRAM
+				"loader": {
+					"file": "bootloader_0x30133100.bin",
+					"load address": "0x30132000",
+					"entry point" : "0x30133100",
+				},
+				
+				//for 512K SRAM
+				//"loader": {
+				//	"file": "bootloader_0x300b3100.bin",
+				//	"load address": "0x300b2000",
+				//	"entry point" : "0x300b3100",
+				//},
+				
+				//private data: boot pin config, jtag lock config, partiton info config.
+				"resource": {
+					"private2": "private.bin",
+				},
+				
+				//encrypt info
+				//"signature": {
+				//	"algo": "hmac,sha256",
+				//	"privkey": "aes_ssk.bin", 
+				//},
+				//"encryption": {
+				//	"algo": "aes-128-cbc",
+				//	"key": "aes_ssk.bin",
+				//	"iv": "aes_iv.bin",    
+				//},
+			},
+		
+			"uploader.aic": {
+				"head_ver": "0x00010001",
+				"anti-rollback counter": 0,
+				"upgmode-check" : 1,
+				"loader": {
+					"file": "uploader.bin",
+					"load address": "0x30044000",
+					"entry point" : "0x30046000",
+				},
+				
+				//private data: boot pin config, jtag lock config, partiton info config.
+				"resource": {
+					"private2": "private.bin",
+				},
+				
+				//encrypt info
+				//"signature": {
+				//	"algo": "hmac,sha256",
+				//	"privkey": "aes_ssk.bin", 
+				//},
+				//"encryption": {
+				//	"algo": "aes-128-cbc",
+				//	"key": "aes_ssk.bin",
+				//	"iv": "aes_iv.bin",    
+				//},
+			},
+		
+			"application.aic": {
+				"head_ver": "0x00010001",
+				"anti-rollback counter": 196608,// tcm config (0:TCM MODE0; 65536: TCM MODE1; 131072: TCM MODE2; 196608: TCM MODE3; 327680: DISABLE)
+				"upgmode-check" : 1,
+				"loader": {
+					"file": "application.bin",
+					"load address": "0x30040000",
+					"entry point" : "0x300aC000",
+				},
+				
+				//private data: boot pin config, jtag lock config, partiton info config.
+				"resource": {
+					"private2": "private.bin",
+				},
+					
+				// default disable aes encrypt.
+				//encrypt info
+					//"signature": {
+					//	"algo": "hmac,sha256", 
+					//	"privkey": "aes_ssk.bin", 
+					//},
+					//"encryption": {
+					//	"algo": "aes-128-cbc",
+					//	"key": "aes_ssk.bin",
+					//	"iv": "aes_iv.bin",    
+					//},
+			},
+			
+		},
+	},
+}

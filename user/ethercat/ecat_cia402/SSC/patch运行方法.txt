@@ -1,0 +1,21 @@
+ssc_to_1nc_with_not_slot.patch是将SSC生成的Src文件修改为单轴无slot版本的补丁文件，不可用于已经修改过的Src文件。
+Src_1nc_with_no_slot里面是单轴无slot版本参考代码，也可将其替换Src代码实现版本切换。
+
+对于新的SSC代码，可按以下步骤实现：
+1. 使用SSC生成从站协议栈代码。
+2. 使用ssc_to_1nc_with_not_slot.patch按下面方法更新Src文件。
+3. 更新AIC_Servo_no_slot.xml文件到eeprom。
+
+方法1:
+如果您的电脑安装了git，可以使用git bash命令行工具快速运行：
+1. 在SSC目录空白区域右击，选择"git bash here"
+2. 输入命令patch -d Src < ssc_to_1nc_with_not_slot.patch
+3. 回车运行，即可完成SSC中的Src文件修改
+
+方法2：
+通过gnu patch运行。
+1. 在gnuwin32.sourceforge.net/packages/patch.htm下载并安装最新版本gnu patch。
+2. 将patch.exe所在的安装路径添加到系统环境变量
+3. 在SSC所在目录的地址栏输入cmd并回车，打开cmd命令窗口
+4. 输入命令patch -d Src < ssc_to_1nc_with_not_slot.patch
+5. 回车运行，即可完成SSC中的Src文件修改

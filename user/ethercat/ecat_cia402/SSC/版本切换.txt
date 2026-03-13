@@ -1,0 +1,12 @@
+本demo支持两个版本。
+
+slot版本：支持FOE、EOE、SLOT、模拟EEPROM，静态PDO，功能丰富但也增加其复杂度。Src使用Src_slot.7z，ESI使用ECAT_CiA402_v2.xml。
+
+无slot版本：单轴，xml较为简单，支持动态PDO，功能简单、兼容性好。Src使用Src_noslot.7z，ESI使用AIC_Servo_no_slot_v4.xml。
+
+不同版本切换需要两步：
+1.解压对应版本源文件压缩包替换Src文件夹
+2.设备更新对应版本的xml文件
+
+如您需要手动修改xml和源文件以实现更多功能，请参考《M7000 EtherCAT 从站用户指南》
+

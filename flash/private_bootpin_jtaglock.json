@@ -1,0 +1,24 @@
+{
+	"system": {
+		//"upgmode": { // Set PIN to enter BROM's upgrading mode
+		//	// If set upgmode_pin_cfg_reg to "0", disable bootpin detect in PBP
+		//	"upgmode_pin_cfg_reg": "0x10700180", //"0x10700180", // PINMUX REG, PB0(即G=1,P=0) : 0x80+P*0x4+G*0x100 PIN_CFG
+		//	"upgmode_pin_cfg_val": "0x10321",    // PINMUX VAL PIN_CFG=0x10321;
+		//	"upgmode_pin_input_reg": "0x10700100", // INPUT VAL REG, 0x00+G*0x100 GEN_IN_STA
+		//	"upgmode_pin_input_msk": "0x1", // Bit MSK, 1<<pin_num, 1<<0
+		//	"upgmode_pin_input_val": "0x0", // Bit VAL
+		//	"upgmode_pin_pullup_dly": "500", // us
+		//},
+		
+		//"regcfg": {
+		//	"count": "4",
+		//	"regs": [ // Array of reg setting 
+		//		// Set unlock JTAG key
+		//		{ "reg" : "0x18000500", "val": "0x20210101", "dly": "0" }, //KSR0
+		//		{ "reg" : "0x18000504", "val": "0x20220102", "dly": "0" },
+		//		{ "reg" : "0x18000508", "val": "0x20230103", "dly": "0" },
+		//		{ "reg" : "0x1800050C", "val": "0x20240105", "dly": "0" },
+		//	],
+		//},
+	},
+}

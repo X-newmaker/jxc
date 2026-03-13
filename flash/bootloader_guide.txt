@@ -1,0 +1,3 @@
+bootloader_0x300b3100.bin : 适用于512KB SRAM的芯片
+bootloader_0x30133100.bin : 适用于1024KB SRAM的芯片
+用户根据芯片的规格，在app项目的image_cfg.json的"bootloader.aic"节点的"loader"子节点，打开对应的bootloader配置，重新编译即可。

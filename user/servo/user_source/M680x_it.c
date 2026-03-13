@@ -1,0 +1,4139 @@
+
+#include "servo_drv_setting.h"
+#include "all_inc.h"
+#include "M680x_it.h"
+#include "LineInterplt.h"
+#include "ecatslv.h"
+
+#define PosRefMode 0 //0 abs; 1 相对式
+
+extern volatile struct HCL_REGS *HCL[];
+extern volatile struct GLB_PWMCS_REGS Glb_Pwmcs_Regs;
+extern volatile struct EPWM_REGS *EPWM[];
+extern volatile struct QEP_REGS *QEP[];
+extern volatile struct COR_REGS Cor_Regs;
+
+extern wdog_dev_t* const wdog_dev_p;
+#define ExPulseTimerEn  (*QEP[QEP_PULSE_NUM]).QEP_POS_CNT_CONF.bit.POS_CNT_EN //外部脉冲计数器QEP3使能开关
+#define ExPulseTimerCnt (*QEP[QEP_PULSE_NUM]).QEP_POS_CNTV
+#define ExPulseTimerDir 0
+#define PWMPRDINT  0 == (*EPWM[Aixse1_EPWM_U]).PWM_CNT_STS.bit.CNT_DIR_STS	//周期中断
+#define PWMZEROINT 1 == (*EPWM[Aixse1_EPWM_U]).PWM_CNT_STS.bit.CNT_DIR_STS	//下溢中断
+//DO1
+void ioServoReadyOutPut(void);    //伺服准备好
+void ioHomeFinishOutPut(void);    //在原点
+void ioAbsaBatteryLowOutPut(void);//电池欠压
+//DO2
+void ioPrRunFinishOutPut(void);//内部位置运行完成
+void ioServoAlarmOutPut(void); //伺服报警
+//DO4
+void ioTrArriveOutput(void);   //扭矩到达
+void ioStArriveOutput(void);   //速度到达
+void ioPtArriveOutput(void);   //定位完成
+//DO5
+//void ioBrkrOutput(void);       //抱闸控制
+void cordic_cal_user(s32 data1, _iq *result1,_iq *result2);
+void pos_pid_err_ctrl(int16_t input_data);
+void ol_pulse_send_ctrl(int16_t input_data);
+void ioPinOutput(void);
+void DesignGpio(void);
+void CheckMotorAlarm(void);
+void LdFromParaIint(void);
+void MotorUvwErrChk(s16 ServoCmdRef);
+void motor_para_init(void);
+void motor_para_cala(void);
+void motor_para_real_cala(void);
+void MS_CurrentOverCheck(void);
+void MS_DispMotorSpeed(void);
+void MS_TorqOpenTest(void);
+void MS_DcbusClac(void);
+void MS_Irq_Time_Clac(void);
+void MS_CurLoop(_iq IqPidInput );
+void MS_SpeedLoop(_iq SpdPidInput);
+void MS_PositionLoop(s32 PulseCommand);
+void MS_PositionLoopNoGear(s32 PulseCommand);
+void MS_Ps_DaoKu(s16 DaoKu_MotorSpeed);
+void MS_ServoAutoRunMode4(void);//自动运行
+void MS_Home_Pr(int64_t dist_value,int16_t speed_value,uint32_t acc_time,uint32_t dec_time);
+void MS_AbsaAxise_Home(void);
+void back_to_zero_point(void);
+void MS_Cur(void);
+void MS_Cur_Withd_Test(void);//电流环带宽测试
+void MS_Pt(void);
+void ESC_Pt(void);
+void MS_Pr(void);
+void MS_Si(void);
+void ESC_Si(void);
+void MS_Ti(void);
+void ESC_Ti(void);
+void MS_CO1(void);
+void MS_CO2(void);
+void MS_Sr(void);
+void MS_Ol(void);
+void MS_JOG(void);
+void MS_OP(void);
+void MS_HCL_OP0(void);
+void MS_HCL_OP1(void);
+void MS_AUTO_Pr(void);
+void MS_AUTO_TEST(void);
+void MS_STOP(void);
+void MS_RUN(void);
+void MS_ERROR(void);
+
+int16_t   speed_loop_ps = 1;
+int16_t   speed_loop_count = 1;
+int16_t   position_loop_ps = 1;
+int16_t   position_loop_count = 1;
+int16_t   position_loop_count1 = 1;
+
+int16_t   U_FLT_cnt = 0;
+int16_t   V_FLT_cnt = 0;
+int16_t   W_FLT_cnt = 0;
+int16_t   W_FLT_ps = 20;
+
+int16_t   _iqsin_ang = 0;
+int16_t   _iqcos_ang = 0;
+int16_t   _iqsin_value = 0;
+int16_t   _iqcos_value = 0;
+float     PWM_T = 0.001f/10.0f;
+
+
+int16_t   SonDelayCnt = 0;
+int32_t   MotorRunFlag = 0;
+int32_t   ExternSerovN = 0;
+int32_t   ExternSerovM = 0;
+int32_t   fenzi = 131072;
+int32_t   fenmu = 10000;
+int32_t   _iqPositionMax = 0;
+int16_t   ServoRunState = 0;
+
+uint16_t  spd_sum_cnt=0;
+int16_t   speed_spd=0;
+int32_t   PulseSpeedRef = 0;
+  float   speed_ref = 0.1;
+int16_t   speed_disp_sr=0.;
+int16_t   speed_disp_jr=0;
+int16_t   speed_disp_ol=0;
+
+int16_t   speed_disp_ol_flag=0;
+int16_t   slaver_dp_data[50]={0};
+int32_t   long_OL_pos_ref=0;
+
+int32_t   Ps_speed_ref = 0;
+
+int16_t   LED_PULSE_DISP = 0;
+int16_t   LED_DIR_DISP = 0;
+
+int32_t   back_zero_offset = 0;
+int16_t   back_zero_speed = 0;
+int16_t   back_zero_flag = 0;
+int16_t   HomeFinishCnt = 0;
+int32_t   HomeStopTimeDelay = 0;
+
+int16_t   WorkState = 0;
+
+int64_t   PosRef = 0;
+int32_t   auto_run_en = 0;
+int16_t   AutoMode = 0;
+int16_t   SoftPtrgFlag = 0;
+int32_t   AutoDelayTime = 10000;
+int32_t   AutoDelayCnt = 0;
+
+int32_t   long_Pr_pos_sum_ref1=0;
+int32_t   long_Pr_pos_sum_ref1_new=0;
+int32_t   long_Pr_pos_sum_ref1_old=0;
+int32_t   long_Pr_pos_sum_ref2=0;
+int32_t   long_Pr_pos_sum_ref3=0;
+int32_t   long_Pr_pos_sum_ref4=0;
+int32_t   long_Pr_pos_sum_ref5=0;
+int32_t   long_Pr_pos_sum_ref6=0;
+int32_t   long_Pr_pos_sum_ref7=0;
+int32_t   long_Pr_pos_sum_ref8=0;
+int32_t   long_Pr_time_delay1 = 0;
+int32_t   long_Pr_time_delay2 = 0;
+
+int32_t  hcl_spd_reg = 0;
+int32_t   _iqpid_spd_out_Limit = 0;
+int32_t   contrl_cmd_frq=0;
+int32_t   pos_ek=0;
+int32_t   pos_ek_err=0;
+int64_t   pos_sum_ek=0;
+int64_t   pos_sum_ek_out=0;
+
+int32_t   iq_pos_sum_ek=0;
+int32_t   contrl_sum_pos_frq=0;
+int32_t   contrl_sum_cmd_frq=0;
+int32_t   ContrlCmdRefM = 0;
+int64_t   contrl_cmd_frq_ek=0;
+int64_t   contrl_fdb_frq_ek = 0;
+int32_t   tspd_signal_out_delay = 0;
+int32_t   TorqueArrtimeRef = 1000;
+int32_t   HoldDelayTimeRef = 1000;
+int16_t   zspd_signal_out_delay = 0;
+int16_t   zspd_signal_out_flag = 0;
+int32_t   power_up_delay = 0;
+int32_t   power_up_delay_ps = 10000;
+int16_t   JogCheckDelay = 0;
+int16_t   JogMode = 0;
+//////////////////////////////////////////////
+int16_t   TrArriveRealFlag = 0;
+int64_t   g_MovePos=0; //
+int32_t   epwm_isr_cnt = 0;
+int16_t   g_PosRefUpdateFlag =0;
+
+int32_t   CodeAdjustFinishCnt = 0;
+int16_t   AbsaCmdTmp = 2;
+//////////////////////////////////////////////
+int16_t   VdcCnt = 1;
+int16_t   VdcAvg = 0;
+int32_t   VdcSum = 0;
+int32_t   _iq_I_eqv=0;
+int16_t   int_I_eqv=0;
+
+int16_t   long_I_eqv_max=0;
+
+int16_t   I_sum_cnt=0;
+
+int32_t   long_I_eqv_sum=0;
+int32_t   long_I_eqv_dsp=0;
+int32_t   int_I_alm_gate=0;
+int32_t   int_I_alm_gate2 = 0;
+int16_t   i_error_cnt = 0;
+int16_t   i_error_cnt2 = 0;
+int32_t   TrArriveTimeRef = 0;
+int32_t   HomeTrArriveTimeRef = 0;
+
+int32_t   MotorBackZeroTrLimit=0;
+int32_t   MotorBackZeroTrLimit1=0;
+int32_t   MotorBackZeroTrLimit2=0;
+int32_t   MotorBackZeroTrLimit3=0;
+int16_t   TrArriveFlag = 0;
+int32_t   pid1_spd_pid_ref_tmp=0;
+int32_t   pid1_i_pid_limit_tmp = 0;
+int32_t   pid1_i_pid_limit_tmp_min = 0;
+int32_t   TurLimitMinKp = 0;
+int32_t   TorqueLimintK = _IQ(1);
+int32_t   _iq_pid1_spd_ref_bef=0;
+int32_t   _iq_pid1_spd_ref_next=0;
+int32_t   _iq_pid1_spd_ref_ek=0;
+int32_t   _iq_pid1_iq_ref_bef=0;
+int32_t   SpdKpChgK = 0;
+int32_t   SpdPidOutLimit = 0;
+int16_t   TrArrveState = 0;
+  float   Vq_testing = 0.0f;
+  float   Iq_testing = 0.0f;
+int32_t   int_motor_open_dhold_delay_cnt=0;
+int16_t   int_motor_open_dhold_sucess_flag=0;
+int32_t   int_motor_close_dhold_delay_cnt=0;
+int32_t   int_speed_max=3000;
+
+
+int32_t   _iq24SpdPidRef = 0;
+int64_t   _iqPulseSendMax = 0;
+int32_t   _iqPulseSendCalc = 0;
+int32_t   _iqPulseSendSave = 0;
+int32_t   _iq15MotorSpeedMax = 0;
+int32_t   _iq15SteptValve = 0;
+
+float     _floatSpdBackFilterK = 0.0;
+float     _floatSpdBackFilter1 = 0.0;
+float     _floatSpdBackFilter2 = 0.0;
+int32_t   _iqSpdBackFilter1 = 0;
+int32_t   _iqSpdBackFilter2 = 0;
+int32_t   _iqSpdBackFilterChg1 = 0;
+int16_t   ParSaveEnable = 0;
+int16_t   MotorStopTime = 0;
+int16_t   DaoSpeed=0;
+int32_t   DaoRunPulseSum = 0;
+int16_t   Run_Pos_seg = 0;
+int16_t   Run_Spd_seg = 0;
+int16_t   PTRG_enable = 0;
+int16_t   Pr_RunFinishFlag = 1;
+int32_t   BASE_FREQ = 200;           /* Base electrical frequency (Hz) */
+int16_t   ccwl_cwl_flag = 0;
+int16_t   ccwl_flag = 0;
+int16_t   cwl_flag = 0;
+int16_t   Cpu_Reset_Flag = 0;
+int16_t   Cpu_Reset_Cnt = 0;
+int16_t   MotorDuoXingStopEn = 0;
+int16_t   MotorDuoXingStopFlag = 0;
+int16_t   puwer_up_delay_finish_flag = 0;
+
+int16_t   P1_05 = 0;
+int16_t   P1_06 = 0;
+int16_t   ParExceDefFlag = 0;
+//int16_t   ParDefNum = 0;
+int32_t   ServoAutoTestCnt = 0;
+int16_t   HclEnableSw_new = 0;
+int16_t   HclEnableSw_old = 0;
+int16_t   HclEnableSw_flag = 0;
+int16_t   IsrFrequency_new = 0;
+int16_t   IsrFrequency_old = 0;
+int16_t   IsrFrequency_flag = 0;
+int16_t   AbsaTypeCmd_new = 0;
+int16_t   AbsaTypeCmd_old = 0;
+int16_t   AbsaTypeCmd_flag = 0;
+int16_t   MotorType_new = 0;
+int16_t   MotorType_old = 0;
+int64_t   run_start_time = 0;
+int64_t   run_end_time = 0;
+int32_t   run_irq_time = 0;
+
+FILTER   spd_fil1 = FILTER_DEFAULTS;
+FILTER   spd_fil2 = FILTER_DEFAULTS;
+FILTER   spd_fil3 = FILTER_DEFAULTS;
+FILTER   park_de_fil1 = FILTER_DEFAULTS;
+FILTER   park_qe_fil1 = FILTER_DEFAULTS;
+FILTER   pos_bef_fil1 = FILTER_DEFAULTS;
+ILEG2DCBUSMEAS ilg2_vdc1 = ILEG2DCBUSMEAS_DEFAULTS;
+
+PIDREG3 pid1_id = PIDREG3_DEFAULTS;
+PIDREG3 pid1_iq = PIDREG3_DEFAULTS;
+PIDREG3 pid1_spd = PIDREG3_DEFAULTS;
+PIDREG3 pid1_pos = PIDREG3_DEFAULTS;
+SPEED_MEAS_PR  pr1 = SPEED_MEAS_PR_DEFAULTS;
+PIDREG3 pid1_fdb_bef = PIDREG3_DEFAULTS;
+
+PWMGEN pwm1 = PWMGEN_DEFAULTS;
+SPEED_MEAS_POS pos = SPEED_MEAS_POS_DEFAULTS;
+SPEED_MEAS_QEP speed1 = SPEED_MEAS_QEP_DEFAULTS;
+SPEED_MEAS_CMD contrl = SPEED_MEAS_CMD_DEFAULTS;
+SPEED_MEAS_CMD cmd_hz = SPEED_MEAS_CMD_DEFAULTS;
+SPD_RMPCNTL spd_rc1 = SPD_RMPCNTL_DEFAULTS;
+
+pi_t pi_spd1 = PI_DEFAULT;
+pi_t pi_id1  = PI_DEFAULT;
+pi_t pi_iq1  = PI_DEFAULT;
+
+clarke_t clark1 = CLARKE_DEFAULT;
+park_t park1 = PARK_DEFAULT;
+ipark_t ipark1 = IPARK_DEFAULT;
+svpwm_t svpwm1 = SVPWM_DEFAULT;
+abs_param_t abs_param1 = ABS_PARA_DEFAULT;
+speed_t abs_speed1 = SPEED_DEFAULT;
+rmpcntl_t rmp1 = RMPCNTL_DEFAULT;
+wdog_cfg_reg_t wdog1;
+RAMPGEN rg1 = RAMPGEN_DEFAULTS;
+SERVO_PAR Servo;
+SERVO_ERR Err;
+SERVO_DI  IoDi;
+SERVO_DO  IoDo;
+SERVO_FN  Fn;
+SERVO_PDO EscPdo;
+HCL_SWITCH HclSwitch;
+SERVO_COMM ServoCommData;
+STR_LINE_INTERPLT_ATTRIB STR_XiLnIntplt = LineInterpltAttribDflts;
+
+int16_t   IrqTimeCnt = 1;
+int16_t   IrqTimeAvg = 0;
+int32_t   IrqTimeSum = 0;
+
+#ifdef ABS_SERVO_EXAMPLE
+void HCL_DONE_isr(void)
+{
+	u32 hcl_sts;
+	hcl_sts = (*HCL[Aixse1_HCL_NUM]).HCL_INT_STS.bit.HCL_DNE_STS;
+	if(hcl_sts == 0x1)
+	{
+		(*HCL[Aixse1_HCL_NUM]).HCL_INT_STS.bit.HCL_DNE_STS = 0x1;
+	}
+}
+void PWM_IRQHandler_isr(void)
+{
+	u32 pwm_sts;
+	u32 u_sdfm_sts;
+	u32 v_sdfm_sts;
+
+	pwm_sts = get_xpwm_sts_flag(0);
+	if((pwm_sts & 0x0002) == 0x0002)
+	{
+
+		commTicker++;  //串口通讯计时器
+		u_sdfm_sts = sdfm_get_irq_sts(sdfm_num_u);//读U相状态
+		v_sdfm_sts = sdfm_get_irq_sts(sdfm_num_v);//读V相状态
+		/*
+		 * 判断调制器是否有错
+		 */
+		//wenxuan
+//		if(((u_sdfm_sts & 0x04) == 0x04)
+//			|| ((v_sdfm_sts & 0x04) == 0x04))
+//		{
+//			Err.MainCurRefErrFlag = 1;
+//			Err.ServoAlarmFlag = 1;
+//			sdfm_fault_int_clear(sdfm_num_u);
+//			sdfm_fault_int_clear(sdfm_num_v);
+//		}
+		xpwm_sts_flag_clr(0,0x0002);
+	}
+}
+void EPWM_FLT_isr(void)
+{
+	u32 sts;
+	sts = Glb_Pwmcs_Regs.GLB_FAULT_INT_STS.all;
+	if((sts & (0x1 << Aixse1_EPWM_U)) == (0x1 << Aixse1_EPWM_U))
+	{
+		if(sdfm_comp_high_flag_read(sdfm_num_u) ||
+		   sdfm_comp_high_flag_read(sdfm_num_v) ||
+		   sdfm_comp_low_flag_read(sdfm_num_u)  ||
+		   sdfm_comp_low_flag_read(sdfm_num_v))
+		{
+			if(U_FLT_cnt >= W_FLT_ps)
+			{
+				Err.SdfmOverFlag = 1;
+				Err.ServoAlarmFlag = 1;
+				pwm1.pwm_off(&pwm1);
+				(*EPWM[Aixse1_EPWM_U]).PWM_FAULT_INT.bit.NREC_FAULT_INT_EN = P_DISABLE;  //不可恢复故障中断禁止
+			}
+			else
+			{
+				U_FLT_cnt++;
+			}
+			sdfm_comp_high_flag_clr(sdfm_num_u);
+			sdfm_comp_high_flag_clr(sdfm_num_v);
+			sdfm_comp_low_flag_clr(sdfm_num_u);
+			sdfm_comp_low_flag_clr(sdfm_num_v);
+		}
+		else
+		{
+			Err.IpmAlarmFlag = 1;
+			Err.ServoAlarmFlag = 1;
+			(*EPWM[Aixse1_EPWM_U]).PWM_FAULT_INT.bit.NREC_FAULT_INT_EN = P_DISABLE;  //不可恢复故障中断禁止
+		}
+		(*EPWM[Aixse1_EPWM_U]).PWM_FAULT_CLR.bit.FAULT_CLR = 0x1;        //清除错误故障标记
+		(*EPWM[Aixse1_EPWM_U]).PWM_FAULT_CLR.bit.NREC_FAULT_CLR = 0x1;   //清除不可恢复故障标记
+	}
+	if((sts & (0x1 << Aixse1_EPWM_V)) == (0x1 << Aixse1_EPWM_V))
+	{
+		if((*EPWM[Aixse1_EPWM_V]).PWM_FAULT_FLG.bit.NREC_FAULT_FLG == 1)//SDFM过流中断
+		{
+			if(sdfm_comp_high_flag_read(sdfm_num_u) ||
+			   sdfm_comp_high_flag_read(sdfm_num_v) ||
+			   sdfm_comp_low_flag_read(sdfm_num_u)  ||
+			   sdfm_comp_low_flag_read(sdfm_num_v))
+			{
+				if(V_FLT_cnt >= W_FLT_ps)
+				{
+					Err.SdfmOverFlag = 1;
+					Err.ServoAlarmFlag = 1;
+					pwm1.pwm_off(&pwm1);
+					(*EPWM[Aixse1_EPWM_V]).PWM_FAULT_INT.bit.NREC_FAULT_INT_EN = P_DISABLE;  //不可恢复故障中断禁止
+				}
+				else
+				{
+					V_FLT_cnt++;
+				}
+				sdfm_comp_high_flag_clr(sdfm_num_u);
+				sdfm_comp_high_flag_clr(sdfm_num_v);
+				sdfm_comp_low_flag_clr(sdfm_num_u);
+				sdfm_comp_low_flag_clr(sdfm_num_v);
+			}
+			else
+			{
+				Err.IpmAlarmFlag = 1;
+				Err.ServoAlarmFlag = 1;
+				(*EPWM[Aixse1_EPWM_V]).PWM_FAULT_INT.bit.NREC_FAULT_INT_EN = P_DISABLE;  //不可恢复故障中断禁止
+			}
+			(*EPWM[Aixse1_EPWM_V]).PWM_FAULT_CLR.bit.FAULT_CLR = 0x1;        //清除错误故障标记
+			(*EPWM[Aixse1_EPWM_V]).PWM_FAULT_CLR.bit.NREC_FAULT_CLR = 0x1;   //清除不可恢复故障标记
+		}
+	}
+	if((sts & (0x1 << Aixse1_EPWM_W)) == (0x1 << Aixse1_EPWM_W))
+	{
+		if((*EPWM[Aixse1_EPWM_W]).PWM_FAULT_FLG.bit.NREC_FAULT_FLG == 1)//SDFM过流中断
+		{
+			if(sdfm_comp_high_flag_read(sdfm_num_u) ||
+			   sdfm_comp_high_flag_read(sdfm_num_v) ||
+			   sdfm_comp_low_flag_read(sdfm_num_u)  ||
+			   sdfm_comp_low_flag_read(sdfm_num_v))
+			{
+				if(W_FLT_cnt >= W_FLT_ps)
+				{
+					Err.SdfmOverFlag = 1;
+					Err.ServoAlarmFlag = 1;
+					pwm1.pwm_off(&pwm1);
+					(*EPWM[Aixse1_EPWM_W]).PWM_FAULT_INT.bit.NREC_FAULT_INT_EN = P_DISABLE;  //不可恢复故障中断禁止
+				}
+				else
+				{
+					W_FLT_cnt++;
+				}
+				sdfm_comp_high_flag_clr(sdfm_num_u);
+				sdfm_comp_high_flag_clr(sdfm_num_v);
+				sdfm_comp_low_flag_clr(sdfm_num_u);
+				sdfm_comp_low_flag_clr(sdfm_num_v);
+			}
+			else
+			{
+				Err.IpmAlarmFlag = 1;
+				Err.ServoAlarmFlag = 1;
+				(*EPWM[Aixse1_EPWM_W]).PWM_FAULT_INT.bit.NREC_FAULT_INT_EN = P_DISABLE;  //不可恢复故障中断禁止
+			}
+			(*EPWM[Aixse1_EPWM_W]).PWM_FAULT_CLR.bit.FAULT_CLR = 0x1;        //清除错误故障标记
+			(*EPWM[Aixse1_EPWM_W]).PWM_FAULT_CLR.bit.NREC_FAULT_CLR = 0x1;   //清除不可恢复故障标记
+		}
+	}
+}
+
+void EPWM_IRQHandler_isr(void)
+{
+   u32 hcl0_sts;
+   u32 epwm_sts;
+   epwm_sts = Glb_Pwmcs_Regs.GLB_EPWM_INT_STS.all;
+   if((epwm_sts & (0x1 << EPMW_CTRL_NUM)) == (0x1 << EPMW_CTRL_NUM))//判断是否epwm0中断
+   {
+
+	   run_start_time = gpt_get_time(PGT_NUM);
+//	   gpio_set_val(DO1,GPIO_LEVEL_HIGH);
+	   U_FLT_cnt = 0;
+	   V_FLT_cnt = 0;
+	   W_FLT_cnt = 0;
+	   GenFreq250HzFunc(STR_FUNC_Gvar.System.ToqFreq);
+	   GenFreq20HzFunc(STR_FUNC_Gvar.System.ToqFreq);
+	   if(Err.ServoAlarmFlag ==1)//伺服报警后，延时1.5秒钟，再加报警代码保存到E2PROM里面
+	   {
+		  if(key_delay_tick >= 15000)
+		  {
+			 Err.ErrAlarmSave = 1;
+		  }
+		  else
+		  {
+			 key_delay_tick++;
+		  }
+	   }
+	   if(power_up_delay >= power_up_delay_ps)//上电延时时间已到
+	   {
+		  puwer_up_delay_finish_flag = 1;
+		  ioPinOutput();
+		  DesignGpio();
+//		  if(Servo.Pn01.ServoON.Data == 0)
+//		  {
+//			  MS_STOP();
+//		  }
+//		  else
+//		  {
+//			  pwm1.pwm_off(&pwm1);
+//			  MS_HCL_OP();
+//		  }
+#if 1
+		  if(Servo.Pn00.SysReset.Data == 1)//系统复位
+		  {
+				MS_ResetCheck( );
+		  }
+		  else
+		  {
+				if(Servo.Pn01.ContrlMode.Data == CTL_CO1)//编码器调零模式1
+				{
+					MS_CO1();
+				}
+				else if(Servo.Pn01.ContrlMode.Data == CTL_CO2)//编码器调零模式2
+				{
+					MS_CO2();
+				}
+				else
+				{
+					MS_DispMotorSpeed( );   //速度显示
+					MS_DcbusClac();//母线电压
+					MS_Irq_Time_Clac();//三环执行时间测量
+					MS_CurrentOverCheck();  //伺服电流报警检测
+					motor_para_real_cala();
+					CheckMotorAlarm();      //伺服报警检测
+					encoder1.calc(&encoder1);//读编码器
+					encoder1.Axis(&encoder1);
+
+					ilg2_vdc1.adc_read(&ilg2_vdc1);//读电流采样
+					if(disp_mod == 0 && layer == 2 && layer1no == Servo.Pn01.DispItem.Data)
+					{
+					   if(key_code_3s == 1)
+					   {
+						   Jr_flag = 1;
+					   }
+					}
+					if(IoDi.DI_CLR == 1)
+					{
+						pos_ek = 0;
+						pos_sum_ek = 0;
+						pos_sum_ek_out = 0;
+					}
+					if(DI_CLR_NEW == 1 && DI_CLR_OLD == 0)
+					{
+						pos_ek = 0;
+						pos_sum_ek = 0;
+						pos_sum_ek_out = 0;
+						iq_pos_sum_ek =  0;
+					}
+					if(Err.ServoAlarmFlag == 1)
+					{
+						ServoRunState = ERROR;
+					}
+					else
+					{
+						if(Servo.Pn01.ServoON.Data == 1)
+						{
+							ServoRunState = RUN;
+						}
+						else if(Jr_flag == 1)
+						{
+							ServoRunState = RUN;
+						}
+						else
+						{
+							if(IoDi.DI_SON == 1)
+							{
+								ServoRunState = RUN;
+							}
+							else if(EscPdo.COMM_SON == 1)
+							{
+								ServoRunState = RUN;
+							}
+							else
+							{
+								ServoRunState = STOP;
+							}
+						}
+					}
+					switch(ServoRunState)
+					{
+						 case  STOP:
+								  if(Servo.Pn01.MotorStopMode.Data == 0)
+								  {
+										MS_STOP( );
+								  }
+								  else
+								  {
+										if(MotorRunFlag == 0)
+										{
+											   MS_STOP( );
+										}
+										else
+										{
+											   if(int_motor_close_dhold_delay_cnt >= HoldDelayTimeRef)
+											   {
+													MS_STOP( );
+													int_motor_close_dhold_delay_cnt = HoldDelayTimeRef + 1;
+											   }
+											   else
+											   {
+												    int_motor_close_dhold_delay_cnt++;
+												    MotorDuoXingStopFlag = 1;
+												    MS_RUN( );
+											   }
+										}
+								   }
+							break;
+							case  RUN:
+								  MS_RUN( );
+							break;
+							case   ERROR:
+								  MS_ERROR( );
+							break;
+							default:break;
+						}
+				   }
+			}
+#endif
+	   }
+	   else
+	   {
+		   power_up_delay++;
+		   pwm1.pwm_off(&pwm1);
+		   encoder1.calc(&encoder1);//读编码器
+		   encoder1.Axis(&encoder1);//打包编码器位置数据为32位
+		   ilg2_vdc1.adc_filter(&ilg2_vdc1);
+		   speed1.theta_new = encoder1.absa_theta_raw;
+		   speed1.calc(&speed1);
+		   pos.calc(&pos);
+		   ioPinOutput();
+		   //计算母线电压对应ADC转换值的平均值，HCL电压补偿使用
+		   VoltageAveCalc(ilg2_vdc1.Vdc_meas);
+	   }
+
+//	   gpio_set_val(DO1,GPIO_LEVEL_LOW);
+	   run_end_time = gpt_get_time(PGT_NUM);
+	   writel(0,GPT_CNTR_VAL(PGT_NUM));
+	   run_irq_time = run_end_time - run_start_time;
+	   (*EPWM[EPMW_CTRL_NUM]).PWM_EVNT_CLR.bit.PWM_INT_CLR = 0x1;
+
+   }
+}
+void MS_RUN(void)
+{
+
+	     if( SonDelayCnt >= Servo.Pn01.SonDelayTime.Data)
+		 {
+			   MotorRunFlag=1;
+			   SonDelayCnt = Servo.Pn01.SonDelayTime.Data+1;
+		 }
+		 else
+		 {
+			   SonDelayCnt++;
+			   MotorRunFlag = 0;
+		 }
+		 if(MotorRunFlag == 1)
+		 {
+			   pwm1.pwm_on(&pwm1);
+
+			   if(Servo.Pn01.OpenDelaySw.Data == 1)
+			   {
+					 if(int_motor_open_dhold_delay_cnt >= Servo.Pn02.OpenDelayTime.Data)
+					 {
+						  int_motor_open_dhold_sucess_flag = 1;
+						  if(gpio_get_val(ioPowerLowIn) == 0)
+						  {
+							  IoDo.BRKR = 1;
+						  }
+						  else
+						  {
+							  IoDo.BRKR = 0;
+						  }
+					 }
+					 else
+					 {
+						  int_motor_open_dhold_delay_cnt++;
+						  int_motor_open_dhold_sucess_flag = 0;
+					 }
+			    }
+			    else
+			    {
+					 if(gpio_get_val(ioPowerLowIn) == 0)
+					 {
+						 IoDo.BRKR = 1;
+					 }
+					 else
+					 {
+						 IoDo.BRKR = 0;
+					 }
+			    }
+
+			    DI_SHOME_Old = DI_SHOME_New;
+			    DI_SHOME_New = IoDi.DI_SHOME;
+			    if((DI_SHOME_New == 1 && DI_SHOME_Old == 0) || (Servo.Pn01.AutoHomeFlag.Data == 1))
+			    {
+				      DI_SHOME_Enable = 1;
+			    }
+			    if(DI_SHOME_Enable == 1)
+			    {
+				      back_to_zero_point( );
+			    }
+			    else
+			    {
+				      if(Jr_flag == 0)
+				      {
+					       switch(Servo.Pn01.ContrlMode.Data)
+					       {
+						      case CTL_Pt:
+						    	  if(Servo.Pn01.ContrlSource.Data == 2)//CSP模式
+						    	  {
+						    		  ESC_Pt();
+						    	  }
+						    	  else
+						    	  {
+						    	      MS_Pt();
+						    	      //MS_Cur();
+						    	  }
+						      break;
+						      case CTL_Pr:
+								  MS_Pr();
+							  break;
+						      case CTL_Si:
+						    	  if(Servo.Pn01.ContrlSource.Data == 2)//CSV模式
+						    	  {
+						    		  ESC_Si();
+						    	  }
+						    	  else
+						    	  {
+									  MS_Si();
+						    	  }
+						      break;
+						      case CTL_Ti:
+						    	  if(Servo.Pn01.ContrlSource.Data == 2)//CSV模式
+						    	  {
+						    		  ESC_Ti();
+						    	  }
+						    	  else
+						    	  {
+						    		  MS_Ti();
+						    	  }
+						      break;
+						      case CTL_Sr:
+								  MS_Sr();
+							  break;
+						      case CTL_OL:
+								  MS_Ol();
+							  break;
+						      case CTL_OP:
+						    	  MS_OP();
+						      break;
+						      case CTL_AUTO_Pr:
+								  MS_AUTO_Pr();
+							  break;
+						      case CTL_WITHD_TEST: //硬件电流环带宽测试
+								  MS_Cur_Withd_Test();
+							  break;
+						      case CTL_AUTO_TEST:
+								  MS_AUTO_TEST();
+							  break;
+						      case CTL_TorqOpen:
+								  MS_TorqOpenTest();
+							  break;
+						      default:
+						    	  pwm1.pwm_off(&pwm1);
+						      break;
+					       }
+				      }
+				      else
+				      {
+					       MS_JOG( );
+					       if(layer != 2)//如果不在第二层菜单
+					       {
+							  if(JogCheckDelay > 1000)//超过100ms
+							  {
+								   Jr_flag = 0;  //切换到正常控制模式
+								   JogCheckDelay = 0;
+							  }
+							  else
+							  {
+								   JogCheckDelay++;
+							  }
+					       }
+				      }
+			   }
+		 }
+		 else
+		 {
+			   position_loop_count = 1;
+			   speed_loop_count = 1;
+			   hcl_pid_clr(0);//清除电流环PID
+			   speed1.theta_new =  absa_theta_raw_from_cpld;
+			   speed1.theta_old =  speed1.theta_new;
+			   ServoCommData.PositionDatah = (encoder1.AbsaAxisData17bit & 0xFFFF0000)>>16;
+			   ServoCommData.PositionDatal = (encoder1.AbsaAxisData17bit & 0x0000FFFF);
+			   long_Pr_pos_sum_ref1_new = encoder1.AbsaAxisData17bit;
+			   long_Pr_pos_sum_ref1_old = encoder1.AbsaAxisData17bit;
+			   contrl.cmd_new = ExPulseTimerCnt;
+			   contrl.cmd_old = contrl.cmd_new;
+			   pos.fdb_new = absa_theta_raw_from_cpld;
+			   pos.fdb_old = pos.fdb_new;
+		 }
+
+}
+#endif
+
+void pos_pid_err_ctrl(int16_t input_data)
+{
+	int16_t encoder_type;
+	encoder_type = input_data;
+	if(encoder_type <= 24)
+	{
+		pid1_pos.e_reg3 = (int32_t)pos_sum_ek_out<<(24 - encoder_type);//IQ17->_IQ24*/
+	}
+	else
+	{
+		pid1_pos.e_reg3 = (int32_t)pos_sum_ek_out>>(encoder_type - 24);//IQ25->_IQ24*/
+	}
+
+}
+void ol_pulse_send_ctrl(int16_t input_data)//测试模式内部自己发脉冲
+{
+	int8_t encoder_type;
+	int64_t tmp;
+	encoder_type = input_data;     //P2-58的2位数
+	speed1.PulseSendMax = speed1.position_max*position_loop_ps;
+	tmp = ((float)speed1.position_max*position_loop_ps / (float)int_speed_max)*(2<<(encoder_type - 1));
+	//以17bit编码器的位置偏差为参考
+	if(encoder_type >= 17)
+	{
+	   pos_ek_err = (int32_t)(Servo.Pn02.PosEkWarm.Data)*(int32_t)Servo.Pn02.PosEkWarm.Unit<<(encoder_type-17);
+	}
+	else
+	{
+		pos_ek_err = (int32_t)(Servo.Pn02.PosEkWarm.Data)*(int32_t)Servo.Pn02.PosEkWarm.Unit<<(encoder_type-17);
+	}
+}
+/*******************************DO1的引脚功能********************/
+void ioServoReadyOutPut(void)
+{
+
+}
+void ioHomeFinishOutPut(void)
+{
+	  if(encoder1.AbsaAxisEk >= -Servo.Pn01.HomeNearWidth.Data && encoder1.AbsaAxisEk <= Servo.Pn01.HomeNearWidth.Data)//?????????
+	  {
+		   zspd_signal_out_flag = 1;
+	  }
+	  else
+	  {
+		   if(zspd_signal_out_flag == 0)
+		   {
+			  Io_Output_state &= 0xFFDF;
+			  IoDo.HOME = 0;
+		   }
+	  }
+	  if(zspd_signal_out_flag == 1)
+	  {
+		   if(tspd_signal_out_delay >= Servo.Pn02.HomeDelayTime.Data)
+		   {
+			  zspd_signal_out_flag = 0;
+			  tspd_signal_out_delay = 0;
+			  Io_Output_state &= 0xFFDF;
+			  IoDo.HOME = 1;
+		   }
+		   else
+		   {
+			  tspd_signal_out_delay++;
+			  Io_Output_state |= 0x0020;
+			  IoDo.HOME = 0;
+		   }
+	  }
+}
+void ioAbsaBatteryLowOutPut(void)
+{
+    if(Err.AbsaBatteryLowFlag == 1)
+    {
+		 IoDo.BatteryLow = 1;
+    }
+	else
+	{
+		 IoDo.BatteryLow = 0;
+	}
+}
+/*******************************DO2的引脚功能********************/
+void ioPrRunFinishOutPut(void)
+{
+
+}
+void ioServoAlarmOutPut(void)
+{
+    if(Err.ServoAlarmFlag ==0)    //伺服没有报警  Err.ServoAlarmFlag==0
+	{
+		 IoDo.ALARM = 0;
+	}
+	else
+	{
+		 IoDo.ALARM = 1;
+	}
+}
+/*************************DO4的引脚功能*******************************/
+void ioTrArriveOutput(void)
+{
+	  _iq tmp;
+	  tmp = _IQabs(pid1_spd.pid_out_reg3);
+	  switch(TrArrveState)
+	  {
+		case 0:
+			 if(tmp >= pid1_i_pid_limit_tmp)
+			 {
+				 if(tspd_signal_out_delay >= TorqueArrtimeRef )
+				 {
+					 Io_Output_state |= 0x0008;
+					 IoDo.TSPD = 1;
+					 tspd_signal_out_delay = 0;
+					 TrArriveFlag = 1;
+					 TrArrveState = 1;
+				 }
+				 else
+				 {
+					 tspd_signal_out_delay++;
+					 IoDo.TSPD = 0;
+				 }
+			 }
+			 else
+			 {
+				 tspd_signal_out_delay = 0;
+				 Io_Output_state &= 0xFFF7;
+				 IoDo.TSPD = 0;
+			 }
+		break;
+		case 1:
+		     if(tmp >= pid1_i_pid_limit_tmp_min)
+			 {
+			     IoDo.TSPD = 1;
+			 }
+			 else
+			 {
+			     IoDo.TSPD = 0;
+			     TrArrveState = 0;//退出，重新检测扭矩
+			 }
+		break;
+		default:break;
+	}
+}
+void ioStArriveOutput(void)
+{
+    if(Fn.MotorSpd >= Servo.Pn01.SpdSameMargin.Data || Fn.MotorSpd <= -Servo.Pn01.SpdSameMargin.Data)//?????????
+    {
+		 Io_Output_state |= 0x0004;
+		 IoDo.SSPD = 1;
+    }
+    else
+    {
+		 Io_Output_state &= 0xFFFB;
+		 IoDo.SSPD = 0;
+    }
+}
+void ioPtArriveOutput(void)
+{
+   if(contrl_cmd_frq == 0)
+   {
+		 if(pos_sum_ek_out>= -Servo.Pn01.PosNearWidth.Data && pos_sum_ek_out<= Servo.Pn01.PosNearWidth.Data)//?????????
+		 {
+				if(zspd_signal_out_delay >= Servo.Pn01.CoinDelayTime.Data)
+				{
+						Io_Output_state |= 0x0002;
+						IoDo.ZSPD = 1;
+				}
+				else
+				{
+						zspd_signal_out_delay++;
+						Io_Output_state &= 0xFFFD;
+						IoDo.ZSPD = 0;
+				}
+		 }
+		 else
+		 {
+				IoDo.ZSPD = 0;
+				Io_Output_state &= 0xFFFD;
+		 }
+   }
+   else
+   {
+		 IoDo.ZSPD = 0;
+		 Io_Output_state &= 0xFFFD;
+		 zspd_signal_out_delay = 0;
+   }
+}
+void ioPinOutput(void)
+{
+
+   //ioAbsaBatteryLowOutPut( );
+   //ioServoCzOutPut( );
+   ioServoAlarmOutPut( );
+}
+
+void cordic_cal_user(s32 data1, _iq *result1,_iq *result2)
+{
+	Cor_Regs.COR_IN1.bit.IN_PARA1 = (s16)data1;
+	*result2 =  (s16)Cor_Regs.COR_OUT2.bit.OUT_RES2;
+	*result1 =  (s16)Cor_Regs.COR_OUT1.bit.OUT_RES1;
+}
+
+/*
+ * 系统复位是通过设置看门的复位计数器阀值来实现的
+ */
+void MS_ResetCheck(void)
+{
+	pwm1.pwm_off(&pwm1);
+	IoDo.BRKR = 0;//关闭抱闸
+	IoDo.ALARM = 0;
+	if(Cpu_Reset_Cnt >= 200)
+	{
+//		cmu_mod_enable(CMU_MOD_WDOG);
+//		wdog_dev_p->wdog_cfg_reg[0].wdog_clr_thd_reg = 3200;              //清零阈值
+//		wdog_dev_p->wdog_cfg_reg[0].wdog_irq_thd_reg = 3500;              //中断阈值
+//		wdog_dev_p->wdog_cfg_reg[0].wdog_rst_thd_reg = 1;              //复位阈值
+//		wdog_enable(2);            //使能看门狗
+//		wdog_op(WDOG_OP_CNT_CLR);  //看门狗清零，执行系统复位
+//
+//		gtc_dly_time();
+
+		wdog_cmu_init();
+		wdog_force_reset();
+	}
+	else
+	{
+		Cpu_Reset_Cnt++;
+	}
+}
+
+
+
+void MS_STOP(void)
+{
+    IoDo.BRKR = 1;//电机抱闸
+    pwm1.pwm_off(&pwm1);	
+    hcl_pid_clr(0);//清除电流环PID
+
+	pi_reset(&pi_id1);
+	pi_reset(&pi_iq1);
+	park_de_fil1.init(&park_de_fil1);
+	park_qe_fil1.init(&park_qe_fil1);
+	spd_fil2.init(&spd_fil2);
+	spd_fil3.init(&spd_fil2);
+	pos_bef_fil1.init(&pos_bef_fil1);
+	pid1_id.init(&pid1_id);
+	pid1_iq.init(&pid1_iq);
+	pid1_spd.init(&pid1_spd);
+	pid1_pos.init(&pid1_pos);
+	pid1_fdb_bef.init(&pid1_fdb_bef);
+
+	contrl.init(&contrl);
+	pos.init(&pos);
+	spd_rc1.init(&spd_rc1);
+	CSPClear();
+	if(HclSwitch.Hcl_EnableSw == 1)//来自硬件电流环计算出来的反馈速度
+	{
+		if(Servo.Pn02.HclSpdfdbSourceSel.Data == 1)//速度反馈计算来自硬件电流环
+		{
+			speed1.speed_input = (int32_t)(*HCL[Aixse1_HCL_NUM]).SPD_OUT1;//实际转速，IQ24
+			speed1.hcl_calc(&speed1);
+			speed_spd = _IQ24mpy(int_speed_max,speed1.speed_frq);
+		}
+		else
+		{
+			if(speed_loop_count==speed_loop_ps)
+			{
+				 speed1.theta_new = encoder1.absa_theta_raw;
+				 speed1.calc(&speed1);
+				 speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+				 if(speed_spd == -1)speed_spd = 0;
+				 speed_loop_count = 1;
+			}
+			else
+			{
+				 speed_loop_count++;
+			}
+		}
+	}
+	else
+	{
+		if(speed_loop_count==speed_loop_ps)
+		{
+			 speed1.theta_new = encoder1.absa_theta_raw;
+			 speed1.calc(&speed1);
+			 speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+			 if(speed_spd == -1)speed_spd = 0;
+			 speed_loop_count = 1;
+		}
+		else
+		{
+			 speed_loop_count++;
+		}
+	}
+
+    IoDo.TSPD = 0;
+    IoDo.SSPD = 0;
+    IoDo.ZSPD = 0;
+    
+
+	MotorDuoXingStopFlag = 0;
+	int_motor_close_dhold_delay_cnt = 0;
+	int_motor_open_dhold_delay_cnt = 0;
+	int_motor_open_dhold_sucess_flag = 0;
+
+	contrl.cmd_new = ExPulseTimerCnt;
+	contrl.cmd_old = contrl.cmd_new;
+
+	SoftPtrgFlag = 0;
+	AutoMode = 0;
+	Pr_RunFinishFlag = 1;
+
+	JogCheckDelay = 0;
+	Jog_no_key_cnt = 0;
+	JogMode = 0;
+	TrArrveState = 0;
+	MotorRunFlag = 0;
+
+	PTRG_enable = 0;
+	speed_disp_sr = 0;
+	speed_disp_jr = 0;
+	speed_disp_ol = 0;
+	Ps_speed_ref = 0;
+	SonDelayCnt = 0;
+	ccwl_cwl_flag = 0;
+	tspd_signal_out_delay = 0;
+	zspd_signal_out_delay = 0;
+	zspd_signal_out_flag = 0;
+	if(DI_SHOME_Enable == 1)//回零过程中关闭的使能才需要把P1-28清零
+	{
+		Servo.Pn01.AutoHomeFlag.Data = 0;
+		DI_SHOME_Enable = 0;
+	}
+	back_zero_flag = 0;
+	IoDi.DI_ORG1 = 0;
+	IoDi.DI_ORG2 = 0;
+	TrArriveFlag = 0;
+	contrl_sum_cmd_frq = 0;
+	contrl_sum_pos_frq = 0;
+	pos_sum_ek_out=0;
+	iq_pos_sum_ek = 0;
+	pos_sum_ek = 0;
+	pos_ek = 0;
+}
+void MS_ERROR(void)
+{
+	  IoDo.BRKR = 1;//电机抱闸
+      pwm1.pwm_off(&pwm1);	  
+	  hcl_pid_clr(0);//清除电流环PID
+      park_de_fil1.init(&park_de_fil1);
+      park_qe_fil1.init(&park_qe_fil1);
+
+      spd_fil2.init(&spd_fil2);
+      spd_fil3.init(&spd_fil2);
+      pos_bef_fil1.init(&pos_bef_fil1);
+
+      pid1_id.init(&pid1_id);
+      pid1_iq.init(&pid1_iq);
+      pid1_spd.init(&pid1_spd);
+      pid1_pos.init(&pid1_pos);
+      pid1_fdb_bef.init(&pid1_fdb_bef);
+
+
+
+      contrl.init(&contrl);
+      pos.init(&pos);
+      spd_rc1.init(&spd_rc1);
+      CSPClear();
+      if(speed_loop_count==speed_loop_ps)
+      {
+	       speed1.calc(&speed1);
+	       speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+	       if(speed_spd == -1)
+	       {
+		       speed_spd = 0;
+	       }
+	       speed_loop_count = 1;
+      }
+      else
+      {
+	       speed_loop_count++;
+      }
+
+      if(Err.ServoAlarmCansel == 0)
+      {
+	       DefDispItem(20);
+      }      
+      MotorDuoXingStopFlag = 0;
+      int_motor_close_dhold_delay_cnt = 0;
+      int_motor_open_dhold_delay_cnt = 0;
+      int_motor_open_dhold_sucess_flag = 0;
+      contrl_sum_cmd_frq = 0;
+      contrl_sum_pos_frq = 0;
+      pos_sum_ek_out = 0;
+      iq_pos_sum_ek = 0;
+      pos_sum_ek = 0;
+      pos_ek = 0;
+
+     contrl.cmd_new = ExPulseTimerCnt;
+     contrl.cmd_old = contrl.cmd_new;
+
+     MotorRunFlag = 0;
+     Servo.Pn01.AutoHomeFlag.Data = 0;
+     DI_SHOME_Enable = 0;
+     PTRG_enable = 0;
+     speed_disp_sr = 0;
+     speed_disp_jr = 0;
+     speed_disp_ol = 0;
+     Ps_speed_ref = 0;
+     SonDelayCnt = 0;
+     ccwl_cwl_flag = 0;
+     back_zero_flag = 0;
+     IoDi.DI_ORG1 = 0;
+     IoDi.DI_ORG2 = 0;
+     TrArriveFlag = 0;
+}
+void MS_OP(void)
+{
+	u32 etheta;
+	if(speed_loop_count==speed_loop_ps)
+	{
+		 speed1.theta_new = encoder1.absa_theta_raw;
+		 speed1.calc(&speed1);
+		 speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+		 if(speed_spd == -1)speed_spd = 0;
+		 speed_loop_count = 1;
+	}
+	else
+	{
+		 speed_loop_count++;
+	}
+	if(HclSwitch.Hcl_EnableSw == 0)
+	{
+		rg1.rmp_freq = _IQ(speed_ref);
+		rg1.calc(&rg1);
+
+		etheta = _IQtoIQ9(rg1.rmp_out);     //电角度从IQ格式转换Q9
+		etheta &= 0x1ff;
+		//反PARK变换
+		//==========================================
+		ipark1.Ds = 0;
+		ipark1.Qs = _IQ(Vq_testing);
+		ipark1.Sine = _iq_sincos_tbl[etheta];
+		ipark1.Cosine = _iq_sincos_tbl[etheta + 128];
+		ipark_cal(&ipark1);
+
+		//SVPWM
+		//==========================================
+		svpwm1.Ualpha = ipark1.Alpha;
+		svpwm1.Ubeta = ipark1.Beta;
+		svpwm_cal(&svpwm1);
+
+		//更新PWM的占空比
+		(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+		(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+		(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+	}
+	else
+	{
+         if(Servo.Pn01.HclOpenLoopMode.Data == 0)//电压开环控制
+         {
+        	 MS_HCL_OP0();
+         }
+         else if(Servo.Pn01.HclOpenLoopMode.Data == 1)//电流开环控制
+         {
+        	 MS_HCL_OP1();
+         }
+	}
+}
+void MS_HCL_OP0(void)
+{
+	u32 etheta;
+
+	hcl_set_opm(Aixse1_HCL_NUM, HCL_OPM0);//Mode0,电压开环控制
+	rg1.rmp_freq = _IQ(speed_ref);//根据电机运行速度产生一个-pi~pi的角度
+	rg1.calc(&rg1);
+
+	(*HCL[Aixse1_HCL_NUM]).THETA0.bit.VAL = rg1.rmp_out;//
+	(*HCL[Aixse1_HCL_NUM]).UDM0.bit.VAL = 0;
+	(*HCL[Aixse1_HCL_NUM]).UQM0.bit.VAL = _IQ(Vq_testing);//电压值给定
+
+}
+void MS_HCL_OP1(void)
+{
+	u32 etheta;
+
+	hcl_set_opm(Aixse1_HCL_NUM, HCL_OPM1);//Mode1,电流开环控制
+	rg1.rmp_freq = _IQ(speed_ref);//根据电机运行速度产生一个-pi~pi的角度
+	rg1.calc(&rg1);
+
+	(*HCL[Aixse1_HCL_NUM]).THETA0.bit.VAL = rg1.rmp_out;//
+	(*HCL[Aixse1_HCL_NUM]).ID_REF.bit.VAL = 0;
+	(*HCL[Aixse1_HCL_NUM]).IQ_REF.bit.VAL = _IQ(Iq_testing);//电流值给定
+
+}
+void MS_Pt(void)
+{
+	_iqPulseSendSave = 0;
+	spd_rc1.init(&spd_rc1);
+	IoDi.DI_ORG1 = 0;
+	IoDi.DI_ORG2 = 0;
+	ioHomeFinishOutPut( );    //在原点信号
+	ioAbsaBatteryLowOutPut( );//电池低压
+	ioTrArriveOutput();       //扭矩到达信号
+	ioStArriveOutput();       //速度到达信号
+	ioPtArriveOutput();       //定位完成信号
+
+	if(IoDi.DI_EMC != 1)
+	{
+		if(IoDi.DI_INH == 1)
+		{
+			 ExPulseTimerEn = Q_ENABLE;
+			 contrl.cmd_new =  ExPulseTimerCnt;
+		}
+		else if(IoDi.DI_INH == 0)
+		{
+			 ExPulseTimerEn = Q_DISABLE;
+			 contrl.cmd_new = ExPulseTimerCnt;
+			 contrl.cmd_old = contrl.cmd_new;
+		}
+		else
+		{
+			 ExPulseTimerEn = Q_ENABLE;
+			 contrl.cmd_new =  ExPulseTimerCnt;
+		}
+	}
+	else
+	{
+		contrl_cmd_frq = 0;
+		ExPulseTimerEn = Q_DISABLE;
+		contrl.cmd_new = ExPulseTimerCnt;
+		contrl.cmd_old = contrl.cmd_new;
+		Err.MotorEmgsAlarmFlag = 1;
+	}
+
+	if(position_loop_count == position_loop_ps)
+	{
+		 contrl.cmd_new =  ExPulseTimerCnt;
+		 contrl.calc(&contrl);
+
+		 if(Servo.Pn01.MotorDir.Data == 0)
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 1)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 2)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+
+		 if(contrl_cmd_frq > 0)
+		 {
+			 cwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CCWL == 1)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CCWL == 0)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 if(ccwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			 {
+				 contrl_cmd_frq = 0;
+			 }
+		 }
+		if(contrl_cmd_frq < 0)
+		{
+			 ccwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CWL == 1)
+				 {
+					 cwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CWL == 0)
+				 {
+					 cwl_flag = 1;
+				 }
+			  }
+			  if(cwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			  {
+				contrl_cmd_frq = 0;
+			  }
+		}
+	    if(Servo.Pn01.TrArriveWorkMode.Data == 1)
+		{
+			 if(TrArriveFlag == 1)
+			 {
+					contrl_cmd_frq = 0;
+					TrArriveFlag = 0;
+					pos_ek = 0;
+					pos_sum_ek = 0;
+			 }
+		}
+		if(MotorDuoXingStopFlag == 1)
+		{
+			 contrl_cmd_frq = 0;
+		}
+
+	    MS_PositionLoop(contrl_cmd_frq);
+	    position_loop_count = 1;
+   }
+   else
+   {
+		position_loop_count++;
+   }
+   if(speed_loop_count == speed_loop_ps)
+   {
+		MS_SpeedLoop(pid1_pos.pid_out_reg3);
+		speed_loop_count = 1;
+   }
+   else
+   {
+		speed_loop_count++;
+   }
+
+   MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+int32_t pos_dalt = 0;
+void ESC_Pt(void)
+{
+	Servo.Pn04.PosSpeedRef4.Data = EscPdo.Object60FF_SpeedTarget;
+	Servo.Pn04.PosSpeedRef5.Data = EscPdo.Object60FF_SpeedTarget;
+	if(position_loop_count == position_loop_ps)
+	{
+		 if(IoDi.DI_EMC != 1)
+		 {
+			if(IoDi.DI_INH == 1)
+			{
+				 contrl.cmd_new =  EscPdo.Object607A_PostionTarget;
+			}
+			else if(IoDi.DI_INH == 0)
+			{
+
+				 contrl.cmd_new = EscPdo.Object607A_PostionTarget;
+				 contrl.cmd_old = contrl.cmd_new;
+			}
+			else
+			{
+				 contrl.cmd_new =  EscPdo.Object607A_PostionTarget;
+			}
+		 }
+		 else
+		 {
+			contrl_cmd_frq = 0;
+			contrl.cmd_new = EscPdo.Object607A_PostionTarget;
+			contrl.cmd_old = contrl.cmd_new;
+			Err.MotorEmgsAlarmFlag = 1;
+		 }
+		 contrl.calc(&contrl);
+
+
+		 if(Servo.Pn01.MotorDir.Data == 0)
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 1)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 2)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+
+		 if(contrl_cmd_frq > 0)
+		 {
+			 cwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CCWL == 1)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CCWL == 0)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 if(ccwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			 {
+				 contrl_cmd_frq = 0;
+			 }
+		 }
+		if(contrl_cmd_frq < 0)
+		{
+			 ccwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CWL == 1)
+				 {
+					 cwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CWL == 0)
+				 {
+					 cwl_flag = 1;
+				 }
+			  }
+			  if(cwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			  {
+				contrl_cmd_frq = 0;
+			  }
+		}
+	    if(Servo.Pn01.TrArriveWorkMode.Data == 1)
+		{
+			 if(TrArriveFlag == 1)
+			 {
+					contrl_cmd_frq = 0;
+					TrArriveFlag = 0;
+					pos_ek = 0;
+					pos_sum_ek = 0;
+			 }
+		}
+		if(MotorDuoXingStopFlag == 1)
+		{
+			 contrl_cmd_frq = 0;
+		}
+		 pos_dalt = ECTCSPPosCmd();
+		 contrl_cmd_frq = pos_dalt;
+	    MS_PositionLoop(contrl_cmd_frq);
+	    position_loop_count = 1;
+   }
+   else
+   {
+		position_loop_count++;
+   }
+   if(speed_loop_count == speed_loop_ps)
+   {
+		MS_SpeedLoop(pid1_pos.pid_out_reg3);
+		speed_loop_count = 1;
+   }
+   else
+   {
+		speed_loop_count++;
+   }
+
+   MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void MS_Pr(void)
+{
+    int64_t  MoveDist=0;
+	uint32_t AccTime=0,DecTime=0;
+
+	_iqPulseSendSave = 0;
+	spd_rc1.init(&spd_rc1);
+	IoDi.DI_ORG1 = 0;
+	IoDi.DI_ORG2 = 0;
+
+	MoveDist =  (s64)Servo.Pn04.PosOffset4.Data + (s64)Servo.Pn04.PosCircle4.Data * EncodeLine; // 相对以及绝对处理，按条件，131072应该为分辨率
+
+	if(PosRefMode == 1)				//0 abs; 1 相对式
+	{
+		g_MovePos = MoveDist;
+	} else {
+		g_MovePos = MoveDist - PosRef;
+		PosRef = MoveDist;
+	}
+
+    if(1 ==g_PosRefUpdateFlag)  //有更新位置值
+    {
+    	if(g_MovePos) {
+            AccTime  = (u32)Servo.Pn02.SpdIncTime.Data * 10;//ms ,p2-26,1ms = 10 * 100US
+            DecTime = (u32)Servo.Pn02.SpdDecTime.Data  * 10;//ms ,p2-27  ,1000 规划速度对应的功能码 P4-44
+    		LineIntpltInit(0,Servo.Pn04.PosSpeedRef4.Data,0,AccTime,DecTime,g_MovePos,&STR_XiLnIntplt); //  P4-23 应为正速度
+    	}
+		g_PosRefUpdateFlag =0;
+    }
+
+
+	if(IoDi.DI_EMC != 1)
+	{
+		if(IoDi.DI_INH == 1)
+		{
+			 ExPulseTimerEn = Q_ENABLE;
+			 contrl.cmd_new =  ExPulseTimerCnt;
+		}
+		else if(IoDi.DI_INH == 0)
+		{
+			 ExPulseTimerEn = Q_DISABLE;
+			 contrl.cmd_new = ExPulseTimerCnt;
+			 contrl.cmd_old = contrl.cmd_new;
+		}
+		else
+		{
+			 ExPulseTimerEn = Q_ENABLE;
+			 contrl.cmd_new =  ExPulseTimerCnt;
+		}
+	}
+	else
+	{
+		contrl_cmd_frq = 0;
+		ExPulseTimerEn = Q_DISABLE;
+		contrl.cmd_new = ExPulseTimerCnt;
+		contrl.cmd_old = contrl.cmd_new;
+		Err.MotorEmgsAlarmFlag = 1;
+	}
+
+	if(position_loop_count == position_loop_ps)
+	{
+		// contrl.cmd_new =  ExPulseTimerCnt;
+		// contrl.calc(&contrl);
+
+		contrl.cmd_frq = LineIntplt(&STR_XiLnIntplt);
+
+		 if(Servo.Pn01.MotorDir.Data == 0)
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 1)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 2)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+
+		 if(contrl_cmd_frq > 0)
+		 {
+			 cwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CCWL == 1)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CCWL == 0)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 if(ccwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			 {
+				 contrl_cmd_frq = 0;
+			 }
+		 }
+		if(contrl_cmd_frq < 0)
+		{
+			 ccwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CWL == 1)
+				 {
+					 cwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CWL == 0)
+				 {
+					 cwl_flag = 1;
+				 }
+			  }
+			  if(cwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			  {
+				contrl_cmd_frq = 0;
+			  }
+		}
+	    if(Servo.Pn01.TrArriveWorkMode.Data == 1)
+		{
+			 if(TrArriveFlag == 1)
+			 {
+					contrl_cmd_frq = 0;
+					TrArriveFlag = 0;
+					pos_ek = 0;
+					pos_sum_ek = 0;
+			 }
+		}
+		if(MotorDuoXingStopFlag == 1)
+		{
+			 contrl_cmd_frq = 0;
+		}
+	    MS_PositionLoop(contrl_cmd_frq);
+	    position_loop_count = 1;
+   }
+   else
+   {
+		position_loop_count++;
+   }
+   if(speed_loop_count == speed_loop_ps)
+   {
+		MS_SpeedLoop(pid1_pos.pid_out_reg3);
+		speed_loop_count = 1;
+   }
+   else
+   {
+		speed_loop_count++;
+   }
+
+   MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void MS_Si(void)
+{
+	ioStArriveOutput();       //速度到达信号
+    if(speed_loop_count >= speed_loop_ps)
+  	{
+    	if(IoDi.DI_EMC == 0)
+		{
+    		 if(Servo.Pn01.ContrlSource.Data == 0)//速度指令通过IO选择
+    		 {
+				 if(IoDi.DI_SPD2 == 0 && IoDi.DI_SPD1 == 0)
+				 {
+					 Ps_speed_ref = 0;
+				 }
+				 else if(IoDi.DI_SPD2 == 0 && IoDi.DI_SPD1 == 1)
+				 {
+					 Ps_speed_ref = Servo.Pn04.SpeedRef1.Data;
+				 }
+				 else if(IoDi.DI_SPD2 == 1 && IoDi.DI_SPD1 == 0)
+				 {
+					 Ps_speed_ref = Servo.Pn04.SpeedRef2.Data;
+				 }
+				 else if(IoDi.DI_SPD2 == 1 && IoDi.DI_SPD1 == 1)
+				 {
+					 Ps_speed_ref = Servo.Pn04.SpeedRef3.Data;
+				 }
+    		 }
+    		 else if(Servo.Pn01.ContrlSource.Data == 1)//速度来源通过modbusRTU或CANOPEN
+    		 {
+    			 Ps_speed_ref = (int32_t)(((uint32_t)ServoCommData.SpeedDatah << 16) + ServoCommData.SpeedDatal);
+    		 }
+
+			 if(Servo.Pn01.MotorDir.Data == 0)//正命令逆时针嗥骰厥谛藕挪槐湎?
+			 {
+				 spd_rc1.target_value = Ps_speed_ref;
+			 }
+			 else
+			 {
+				 spd_rc1.target_value = -Ps_speed_ref;
+			 }
+			 spd_rc1.calc(&spd_rc1);
+		}
+	    else
+	    {
+			 Err.MotorEmgsAlarmFlag = 1;
+			 Err.ServoAlarmFlag = 1;
+		}
+    	MS_SpeedLoop(spd_rc1.setpt_value);
+  		speed_loop_count = 1;
+  	}
+  	else
+  	{
+  		speed_loop_count++;
+  	}
+    MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void ESC_Si(void)
+{
+	ioStArriveOutput();       //速度到达信号
+	if(speed_loop_count >= speed_loop_ps)
+	{
+		if(nAlStatus == STATE_OP)//OP模式下可以接收主站的速度指令
+		{
+			MS_SpeedLoop(_IQ24(EscPdo.Object60FF_SpeedTarget / (float)int_speed_max));
+			setpt_value_tmp = speed1.speed_frq;
+		}
+		else
+		{
+			spd_rc1.target_value = 0;//减速停机
+			EscPdo.Object60FF_SpeedTarget = 0;
+			spd_rc1.calc(&spd_rc1);
+			MS_SpeedLoop(spd_rc1.setpt_value);
+		}
+		speed_loop_count = 1;
+	}
+	else
+	{
+		speed_loop_count++;
+	}
+	MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void MS_Ti(void)
+{
+	IoDi.DI_ORG1 = 0;
+	IoDi.DI_ORG2 = 0;
+	pos_ek = 0;
+	pos_sum_ek = 0;
+	pos_sum_ek_out = 0;
+	position_loop_count = 1;
+
+	contrl.cmd_new = ExPulseTimerCnt;
+	contrl.cmd_old = contrl.cmd_new;
+	pos.fdb_new = absa_theta_raw_from_cpld;
+	pos.fdb_old = pos.fdb_new;
+	if(IoDi.DI_EMC == 0)
+	{
+		if(IoDi.DI_LOK != 1)
+		{
+			 if(Servo.Pn01.ContrlSource.Data == 0)
+			 {
+				 ExPulseTimerEn = Q_DISABLE;
+				 if(IoDi.DI_SPD2 == 0 && IoDi.DI_SPD1 == 0)
+				 {
+						 Ps_speed_ref = Servo.Pn04.SpeedRef1.Data;
+				 }
+				 else if(IoDi.DI_SPD2 == 0 && IoDi.DI_SPD1 == 1)
+				 {
+						 Ps_speed_ref = Servo.Pn04.SpeedRef2.Data;
+				 }
+				 else if(IoDi.DI_SPD2 == 1 && IoDi.DI_SPD1 == 0)
+				 {
+						 Ps_speed_ref = Servo.Pn04.SpeedRef3.Data;
+				 }
+				 else if(IoDi.DI_SPD2 == 1 && IoDi.DI_SPD1 == 1)
+				 {
+						 Ps_speed_ref = Servo.Pn04.SpeedRef4.Data;
+				 }
+			 }
+			 else
+			 {
+				 ExPulseTimerEn = Q_ENABLE;
+				 Ps_speed_ref = PulseSpeedRef;
+			 }
+		}
+		else if(IoDi.DI_LOK == 1)
+		{
+			 Ps_speed_ref = 0;
+		}
+		if(IoDi.DI_SPDINV == 1 || Servo.Pn01.MotorDir.Data == 1)//速度取反
+		{
+			 Ps_speed_ref = -Ps_speed_ref;
+		}
+
+        if(IoDi.DI_SPD_CW == 0 && IoDi.DI_SPD_CCW == 1)//顺时针
+		{
+			 Ps_speed_ref = -Ps_speed_ref;
+		}
+        if(IoDi.DI_SPD_CW == 0 && IoDi.DI_SPD_CCW == 0)
+		{
+			 Ps_speed_ref = 0;
+		}
+        if(IoDi.DI_SPD_CW == 1 && IoDi.DI_SPD_CCW == 1)
+		{
+			 Ps_speed_ref = 0;
+		}
+		if(MotorDuoXingStopFlag == 1)
+		{
+			 Ps_speed_ref = 0;
+		}
+	}
+	else
+	{
+		  Err.MotorEmgsAlarmFlag = 1;
+		  Err.ServoAlarmFlag = 1;
+	}
+	spd_rc1.target_value = Ps_speed_ref;
+	spd_rc1.calc(&spd_rc1);//执行加减速控制
+
+	/**********************************内部扭矩指令**************************************************/
+	if(Servo.Pn01.TorqueLimitSw.Data == 0)
+	{
+		if(IoDi.DI_FIL == 0 && IoDi.DI_RIL == 0)
+		{
+				pid1_spd.pid_out_max = MotorBackZeroTrLimit1;
+				pid1_spd.pid_out_min = -MotorBackZeroTrLimit1;
+				pid1_i_pid_limit_tmp = MotorBackZeroTrLimit1;
+			    pid1_i_pid_limit_tmp_min = _IQ24mpy(MotorBackZeroTrLimit1,TurLimitMinKp);
+				ioTrArriveOutput();
+				ioStArriveOutput();
+		}
+		else if(IoDi.DI_FIL == 1 && IoDi.DI_RIL == 0)
+		{
+				pid1_spd.pid_out_max = MotorBackZeroTrLimit2;
+				pid1_spd.pid_out_min = -MotorBackZeroTrLimit2;
+				pid1_i_pid_limit_tmp = MotorBackZeroTrLimit2;
+			    pid1_i_pid_limit_tmp_min = _IQ24mpy(MotorBackZeroTrLimit2,TurLimitMinKp);
+	            ioTrArriveOutput();
+				ioStArriveOutput();
+		}
+		else if(IoDi.DI_FIL == 0 && IoDi.DI_RIL == 1)
+		{
+				pid1_spd.pid_out_max = MotorBackZeroTrLimit3;
+				pid1_spd.pid_out_min = -MotorBackZeroTrLimit3;
+				pid1_i_pid_limit_tmp = MotorBackZeroTrLimit3;
+			    pid1_i_pid_limit_tmp_min = _IQ24mpy(MotorBackZeroTrLimit3,TurLimitMinKp);
+				ioTrArriveOutput();
+				ioStArriveOutput();
+		}
+		else
+		{
+				pid1_spd.pid_out_max = _iqpid_spd_out_Limit;
+				pid1_spd.pid_out_min = -_iqpid_spd_out_Limit;
+		}
+	}
+	else
+	{
+		  if(speed_spd > 0)
+		  {
+				pid1_spd.pid_out_max = MotorBackZeroTrLimit1;
+				pid1_spd.pid_out_min = -MotorBackZeroTrLimit1;
+			    pid1_i_pid_limit_tmp = MotorBackZeroTrLimit1;
+				pid1_i_pid_limit_tmp_min = _IQ24mpy(MotorBackZeroTrLimit1,TurLimitMinKp);
+				ioTrArriveOutput();
+				ioStArriveOutput();
+				ioPtArriveOutput();
+
+		  }
+		  else
+		  {
+				pid1_spd.pid_out_max = MotorBackZeroTrLimit2;
+				pid1_spd.pid_out_min = -MotorBackZeroTrLimit2;
+			    pid1_i_pid_limit_tmp = MotorBackZeroTrLimit2;
+				pid1_i_pid_limit_tmp_min = _IQ24mpy(MotorBackZeroTrLimit2,TurLimitMinKp);
+				ioTrArriveOutput();
+				ioStArriveOutput();
+				ioPtArriveOutput();
+		  }
+	}
+
+	if(speed_loop_count==speed_loop_ps)
+	{
+		_iq24SpdPidRef = spd_rc1.setpt_value;
+		if(IoDi.DI_CCWL == 1)
+		{
+			 if(_iq24SpdPidRef > 0)_iq24SpdPidRef = 0;
+		}
+		if(IoDi.DI_CWL == 1)
+		{
+			 if(_iq24SpdPidRef < 0)_iq24SpdPidRef = 0;
+		}
+		if(Servo.Pn01.OpenDelaySw.Data == 1)
+		{
+			 if(int_motor_open_dhold_sucess_flag == 0)
+			 {
+				 _iq24SpdPidRef = 0;
+			 }
+		}
+		MS_SpeedLoop(_iq24SpdPidRef);
+		speed_loop_count=1;
+	}
+	else
+	{
+		speed_loop_count++;
+	}
+	MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+
+void ESC_Ti(void)
+{
+	float target_torque;
+	IoDi.DI_ORG1 = 0;
+	IoDi.DI_ORG2 = 0;
+	pos_ek = 0;
+	pos_sum_ek = 0;
+	pos_sum_ek_out = 0;
+	position_loop_count = 1;
+
+	contrl.cmd_new = ExPulseTimerCnt;
+	contrl.cmd_old = contrl.cmd_new;
+	pos.fdb_new = absa_theta_raw_from_cpld;
+	pos.fdb_old = pos.fdb_new;
+
+	if(IoDi.DI_EMC == 0)
+	{
+		if(IoDi.DI_LOK != 1)
+		{
+			Ps_speed_ref = EscPdo.Object607F_SpeedProfileMax;
+		}
+		else if(IoDi.DI_LOK == 1)
+		{
+			 Ps_speed_ref = 0;
+		}
+		if(IoDi.DI_SPDINV == 1 || Servo.Pn01.MotorDir.Data == 1)//速度取反
+		{
+			 Ps_speed_ref = -Ps_speed_ref;
+		}
+
+        if(IoDi.DI_SPD_CW == 0 && IoDi.DI_SPD_CCW == 1)//顺时针
+		{
+			 Ps_speed_ref = -Ps_speed_ref;
+		}
+        if(IoDi.DI_SPD_CW == 0 && IoDi.DI_SPD_CCW == 0)
+		{
+			 Ps_speed_ref = 0;
+		}
+        if(IoDi.DI_SPD_CW == 1 && IoDi.DI_SPD_CCW == 1)
+		{
+			 Ps_speed_ref = 0;
+		}
+		if(MotorDuoXingStopFlag == 1)
+		{
+			 Ps_speed_ref = 0;
+		}
+	}
+	else
+	{
+		  Err.MotorEmgsAlarmFlag = 1;
+		  Err.ServoAlarmFlag = 1;
+	}
+	spd_rc1.target_value = Ps_speed_ref;
+	spd_rc1.calc(&spd_rc1);//执行加减速控制
+	//EscPdo.Object6071_TargetTorque 为接收扭矩指令数据，单位是0.1%
+	target_torque = (EscPdo.Object6071_TargetTorque * Servo.Pn01.RatedCurrent.Data*144) /
+			        (Servo.Pn01.CurSampleMax.Data * 10000.0);//转换成电流指令标幺值
+	pid1_spd.pid_out_max = _IQ24(target_torque);
+	pid1_spd.pid_out_min = -_IQ24(target_torque);
+
+	if(speed_loop_count==speed_loop_ps)
+	{
+		_iq24SpdPidRef = spd_rc1.setpt_value;
+		if(IoDi.DI_CCWL == 1)
+		{
+			 if(_iq24SpdPidRef > 0)_iq24SpdPidRef = 0;
+		}
+		if(IoDi.DI_CWL == 1)
+		{
+			 if(_iq24SpdPidRef < 0)_iq24SpdPidRef = 0;
+		}
+		if(Servo.Pn01.OpenDelaySw.Data == 1)
+		{
+			 if(int_motor_open_dhold_sucess_flag == 0)
+			 {
+				 _iq24SpdPidRef = 0;
+			 }
+		}
+		MS_SpeedLoop(_iq24SpdPidRef);
+		speed_loop_count=1;
+	}
+	else
+	{
+		speed_loop_count++;
+	}
+	MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void MS_Sr(void)
+{
+	 ExPulseTimerEn = Q_DISABLE;
+     pos.calc(&pos);
+     pos_ek = 0;
+     pos_sum_ek = 0;
+     _iqPulseSendSave = 0;
+     contrl_sum_pos_frq += pos.fdb_frq;
+     //MS_UVW_CHK(speed_disp_sr);
+      if(MotorDuoXingStopFlag == 1)
+	  {
+	     speed_disp_sr = 0;
+	  }
+
+	  if(speed_loop_count == speed_loop_ps)
+	  {
+		 spd_rc1.target_value = speed_disp_sr;
+		 spd_rc1.calc(&spd_rc1);
+		 MS_SpeedLoop(spd_rc1.setpt_value);
+	     speed_loop_count = 1;
+	  }
+	  else
+	  {
+	     speed_loop_count++;
+	  }
+	  MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+
+}
+void MS_Ol(void)
+{
+	  if(speed_disp_ol_flag == 1)
+	  {
+			if(speed_disp_ol != Servo.Pn04.OlSpeed.Data)
+			{
+				 if(speed_disp_ol >= Servo.Pn04.OlSpeed.Data)
+				 {
+					 speed_disp_ol--;
+				 }
+				 else if(speed_disp_ol < Servo.Pn04.OlSpeed.Data)
+				 {
+					 speed_disp_ol++;
+				 }
+			}
+			else
+			{
+				speed_disp_ol = Servo.Pn04.OlSpeed.Data;
+			}
+	  }
+	  if(MotorDuoXingStopFlag == 1)
+	  {
+		   speed_disp_ol = 0;
+	  }
+	  if(position_loop_count == position_loop_ps)
+	  {
+		  _iqPulseSendCalc = (int32_t)speed_disp_ol*_iqPulseSendMax;
+		  //long_OL_pos_ref = _iqPulseSendCalc >> 17;
+		  long_OL_pos_ref = (_iqPulseSendCalc +  _iqPulseSendSave) / EncodeLine;
+		  _iqPulseSendSave += (_iqPulseSendCalc - long_OL_pos_ref * EncodeLine);
+		  contrl_cmd_frq = long_OL_pos_ref;
+		  pos.calc(&pos);
+
+		  contrl.cmd_filt_xn = contrl_cmd_frq;
+		  contrl.filt(&contrl);
+		  contrl_cmd_frq_ek = contrl.cmd_filt_out;
+
+		  contrl_fdb_frq_ek = pos.fdb_frq;
+		  pos_ek = (contrl_cmd_frq_ek) - (contrl_fdb_frq_ek);
+		  pos_sum_ek +=pos_ek;
+		  pos_sum_ek_out = pos_sum_ek;
+
+		  pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);//pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);
+
+		  pid1_pos.SpeedBefOut = 0;
+		  pid1_spd.SpeedBefOut = 0;
+		  pid1_pos.SpeedBefRef = 0;
+		  pid1_spd.SpeedBefRef = 0;
+		  pid1_pos.SpeedAccOut = 0;
+		  pid1_spd.SpeedAccOut = 0;
+		  pid1_pos.calc(&pid1_pos);
+
+		  position_loop_count = 1;
+	  }
+	  else
+	  {
+		  position_loop_count++;
+	  }
+	  if(speed_loop_count == speed_loop_ps)
+	  {
+		 MS_SpeedLoop(pid1_pos.pid_out_reg3);
+		 speed_loop_count=1;
+	  }
+      else
+	  {
+		 speed_loop_count++;
+	  }
+
+	  MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void MS_Ps_DaoKu(s16 DaoKu_MotorSpeed)
+{
+		Ps_speed_ref = DaoKu_MotorSpeed;
+		/*****************************错相检测**********************************/
+//		MotorUvwErrChk(Ps_speed_ref);
+//		ioTrArriveOutput();
+//		ioStArriveOutput();
+//	    ioPtArriveOutput();
+		if(IoDi.DI_SPDINV == 1)//内部速度命令反向
+		{
+			Ps_speed_ref = -Ps_speed_ref;
+		}
+		if(MotorDuoXingStopFlag == 1)
+		{
+		   Ps_speed_ref = 0;
+		}
+		if(IoDi.DI_EMC == 1)
+		{
+			 Ps_speed_ref = 0;
+			 Err.MotorEmgsAlarmFlag = 1;
+		}
+		spd_rc1.target_value = Ps_speed_ref;
+		spd_rc1.calc(&spd_rc1);
+		if(position_loop_count == position_loop_ps)
+		{
+//			 _iqPulseSendCalc = (int32_t)spd_rc1.setpt_value *_iqPulseSendMax;
+//			 long_OL_pos_ref = (_iqPulseSendCalc +  _iqPulseSendSave) / EncodeLine;
+//			 _iqPulseSendSave += (_iqPulseSendCalc - long_OL_pos_ref * EncodeLine);
+			long_OL_pos_ref = _IQ24mpy(spd_rc1.setpt_value,speed1.PulseSendMax);
+			if(Servo.Pn01.MotorDir.Data == 0)//正命令顺时针转，编码器回授信号不变相
+			 {
+				  contrl_cmd_frq = long_OL_pos_ref;
+			 }
+			 else if(Servo.Pn01.MotorDir.Data == 1)//正命令逆时针转，编器回授信号不变相
+			 {
+				  contrl_cmd_frq = long_OL_pos_ref;
+			 }
+			 else if(Servo.Pn01.MotorDir.Data == 2)//正命令顺时针，编器回授信号变相
+			 {
+				  contrl_cmd_frq = long_OL_pos_ref;
+			 }
+			 else if(Servo.Pn01.MotorDir.Data == 3)//正命令逆时针，编器回授信号变相
+			 {
+				  contrl_cmd_frq = long_OL_pos_ref;
+			 }
+
+			 if(IoDi.DI_EMC == 1)
+			 {
+				  contrl_cmd_frq = 0;
+				  Err.MotorEmgsAlarmFlag = 1;
+			 }
+			 if(MotorDuoXingStopFlag == 1)
+			 {
+				  contrl_cmd_frq = 0;
+			 }
+			 pos.calc(&pos);
+			 if(pid1_fdb_bef.Kp_reg3 != 0)
+			 {
+				  pid1_fdb_bef.e_reg3 = _IQ24(((int32_t)contrl_cmd_frq*1)/(speed1.position_max *(float)position_loop_ps));
+				  pid1_fdb_bef.calc(&pid1_fdb_bef);
+				  pos_bef_fil1.xn =  pid1_fdb_bef.pid_out_reg3;
+				  pos_bef_fil1.calc(&pos_bef_fil1);
+				  pid1_fdb_bef.pid_out_reg3 = pos_bef_fil1.yn;
+
+				  _iq_pid1_spd_ref_bef = pid1_fdb_bef.e_reg3;//当前指令速度
+				  _iq_pid1_spd_ref_ek =  _iq_pid1_spd_ref_bef - _iq_pid1_spd_ref_next;//加速度
+				  _iq_pid1_spd_ref_next = _iq_pid1_spd_ref_bef;//当前速度付给下一次
+			 }
+			 contrl_sum_cmd_frq += contrl_cmd_frq; //当置指?
+			 contrl_sum_pos_frq += pos.fdb_frq;  //位置指令
+
+			 contrl_cmd_frq_ek = (int32_t)contrl_cmd_frq*1;
+			 contrl_fdb_frq_ek = (int32_t)pos.fdb_frq*1;
+			 pos_ek = (contrl_cmd_frq_ek) - (contrl_fdb_frq_ek);
+			 pos_sum_ek +=pos_ek;
+			 pos_sum_ek_out = pos_sum_ek / 1;
+
+			 pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);//pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);
+			 pid1_pos.calc(&pid1_pos);
+			 position_loop_count=1;
+		}
+		else
+		{
+			 position_loop_count++;
+		}
+        if(speed_loop_count==speed_loop_ps)
+        {
+    	     if(Servo.Pn01.OpenDelaySw.Data == 1)
+			 {
+				  if(int_motor_open_dhold_sucess_flag == 1)
+				  {
+					  _iq24SpdPidRef = pid1_pos.pid_out_reg3;
+				  }
+				  else
+				  {
+					  _iq24SpdPidRef = 0;   //放闸期间不接收指令
+				  }
+			 }
+			 else  //不检测放闸
+			 {
+				 _iq24SpdPidRef = pid1_pos.pid_out_reg3;
+			 }
+    	     MS_SpeedLoop(_iq24SpdPidRef);
+			 speed_loop_count=1;
+       }
+       else
+       {
+    	    speed_loop_count++;
+       }
+        MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+
+}
+void MS_ServoAutoRunMode4(void)//自动运行
+{
+	DI_PTRG_Old = DI_PTRG_New;
+	DI_PTRG_New = IoDi.DI_PTRG;
+
+    if(((DI_PTRG_New == 1 && DI_PTRG_Old == 0) || (SoftPtrgFlag == 1)) && Pr_RunFinishFlag == 1)
+	{
+		PTRG_enable = 1;
+	}
+    if(position_loop_count == position_loop_ps)
+    {
+
+		if(PTRG_enable == 1)
+		{
+			  Pr_RunFinishFlag = 0;
+			  SoftPtrgFlag = 0;
+			  if(contrl_cmd_frq > 0)
+			  {
+					if(IoDi.DI_CCWL == 1)ccwl_cwl_flag = 1;
+			  }
+			  else if(contrl_cmd_frq < 0)
+			  {
+					if(IoDi.DI_CWL == 1)ccwl_cwl_flag = 1;
+			  }
+			  if(ccwl_cwl_flag == 0)
+			  {
+					PrRunCtrlCalc(DaoRunPulseSum,DaoSpeed);
+				    WorkState = 1;
+			  }
+			  if(ccwl_cwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			  {
+					contrl_cmd_frq = 0;
+					PTRG_enable = 0;
+			  }
+		}
+		else
+		{
+			  contrl_cmd_frq = 0;
+			  if(WorkState == 1)
+			  {
+					if(pos_sum_ek_out >= -Servo.Pn01.PosNearWidth.Data && pos_sum_ek_out <= Servo.Pn01.PosNearWidth.Data)//定位完墒笔淙胄藕?
+					{
+						 if(Pr_RunFinishFlag == 0)  //内部位置启动且没有运行完毕
+						 {
+							   PrSendPulseFinish();   //运行完一段后重新回到开始状态
+							   Pr_RunFinishFlag = 1;  //运行完成标志
+							   WorkState = 0;
+						 }
+					}
+			  }
+		}
+
+		//contrl_cmd_frq = 300;
+		pos.calc(&pos);
+		if(IoDi.DI_EMC == 1)
+		{
+			  contrl_cmd_frq = 0;
+		}
+		pid1_fdb_bef.e_reg3 = contrl_cmd_frq*_iqPositionMax;
+		pid1_fdb_bef.calc(&pid1_fdb_bef);
+
+		_iq_pid1_spd_ref_bef = pid1_fdb_bef.e_reg3;//当前指令速度
+		_iq_pid1_spd_ref_ek =  _iq_pid1_spd_ref_bef - _iq_pid1_spd_ref_next;//加速度
+		_iq_pid1_spd_ref_next = _iq_pid1_spd_ref_bef;//当前速度付乱淮?
+
+		contrl_sum_cmd_frq += (long)contrl_cmd_frq; //当前位置指令
+		contrl_sum_pos_frq += pos.fdb_frq;  //位置指令
+		contrl.cmd_filt_xn = (long)contrl_cmd_frq;
+		contrl.filt(&contrl);
+		contrl_cmd_frq_ek = contrl.cmd_filt_out;
+
+		contrl_fdb_frq_ek = (long)pos.fdb_frq;
+		pos_ek = (contrl_cmd_frq_ek) - (contrl_fdb_frq_ek);
+		pos_sum_ek += pos_ek;
+		pos_sum_ek_out = pos_sum_ek;
+
+		pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);//pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);
+
+		pid1_pos.SpeedBefOut = pid1_fdb_bef.pid_out_reg3;
+		pid1_pos.SpeedBefRef = pid1_fdb_bef.e_reg3;
+		pid1_spd.SpeedBefRef = pid1_fdb_bef.e_reg3;
+		pid1_spd.SpeedAccOut = _iq_pid1_spd_ref_ek;
+		pid1_pos.calc(&pid1_pos);
+
+		position_loop_count = 1;
+   }
+   else
+   {
+        position_loop_count++;
+   }
+   if(speed_loop_count == speed_loop_ps)
+   {
+	    if(Servo.Pn01.OpenDelaySw.Data == 1)
+	    {
+			  if(int_motor_open_dhold_sucess_flag == 1)
+			  {
+				  _iq24SpdPidRef = pid1_pos.pid_out_reg3;
+			  }
+			  else
+			  {
+				  _iq24SpdPidRef = 0;   //放闸期间不接收指令
+			  }
+		}
+		else  //不检测放闸
+		{
+			 _iq24SpdPidRef = pid1_pos.pid_out_reg3;
+		}
+		MS_SpeedLoop(_iq24SpdPidRef);
+		speed_loop_count=1;
+   }
+   else
+   {
+	    speed_loop_count++;
+   }
+   MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void MS_AUTO_Pr(void)
+{
+	switch(AutoMode)
+	{
+			case 0:                 //停止
+					MS_Ps_DaoKu(0);
+					DaoRunPulseSum = long_Pr_pos_sum_ref4;
+					DaoSpeed =  Servo.Pn04.PosSpeedRef4.Data;
+					SoftPtrgFlag = 1;
+					AutoMode = 1;
+			break;
+			case 1:                 //运行第一段位置
+					MS_ServoAutoRunMode4();
+					if(Pr_RunFinishFlag == 1)
+					{
+						 AutoMode = 2;
+					}
+			break;
+			case 2:                 //暂停
+					if(AutoDelayCnt >= long_Pr_time_delay1)
+					{
+						 AutoDelayCnt = 0;
+						 DaoSpeed =  Servo.Pn04.PosSpeedRef5.Data;
+						 SoftPtrgFlag = 1;
+						 AutoMode = 3;
+					}
+					else
+					{
+						 AutoDelayCnt++;
+					}
+					MS_Ps_DaoKu(0);
+			break;
+			case 3:                 //运行第二段位置
+					MS_ServoAutoRunMode4();
+					if(Pr_RunFinishFlag == 1)
+					{
+						 AutoMode = 4;
+					}
+			break;
+			case 4:
+					if(AutoDelayCnt >= long_Pr_time_delay2)
+					{
+						 AutoMode = 0;
+						 AutoDelayCnt = 0;
+					}
+					else
+					{
+						 AutoDelayCnt++;
+					}
+					MS_Ps_DaoKu(0);
+			break;
+			default:break;
+	}
+}
+void MS_AUTO_TEST(void)
+{
+   if(position_loop_count == position_loop_ps)
+   {
+		   ServoAutoTestCnt++;
+		   if(ServoAutoTestCnt <= long_Pr_time_delay1)   //加速
+		   {
+			  spd_rc1.target_value = Servo.Pn04.SpeedRef3.Data;
+		   }
+		   else if(ServoAutoTestCnt <= 2*long_Pr_time_delay1)   //加速
+		   {
+			  spd_rc1.target_value = -Servo.Pn04.SpeedRef3.Data;
+		   }
+		   else if(ServoAutoTestCnt <= (2*long_Pr_time_delay1 + long_Pr_time_delay2))
+		   {
+			  spd_rc1.target_value = 0;
+		   }
+		   else
+		   {
+			  ServoAutoTestCnt = 0;
+		   }
+
+		   spd_rc1.calc(&spd_rc1);
+
+		   contrl_cmd_frq = _IQ24mpy(spd_rc1.setpt_value,speed1.PulseSendMax);
+		   if(Servo.Pn01.MotorDir.Data == 1)//正命令逆时针嗥骰厥谛藕挪槐湎?
+		   {
+	          contrl_cmd_frq = -contrl_cmd_frq;
+		   }
+
+	       if(contrl_cmd_frq > 0)
+	       {
+			  if(Servo.Pn02.RunLimitDir.Data == 0)
+			  {
+				   if(IoDi.DI_CCWL == 1)ccwl_cwl_flag = 1;
+			  }
+			  else
+			  {
+				   if(IoDi.DI_CCWL == 0)ccwl_cwl_flag = 1;
+			  }
+		   }
+		   else if(contrl_cmd_frq < 0)
+		   {
+			  if(Servo.Pn02.RunLimitDir.Data == 0)
+			  {
+				   if(IoDi.DI_CWL == 1)ccwl_cwl_flag = 1;
+			  }
+			  else
+			  {
+				   if(IoDi.DI_CWL == 0)ccwl_cwl_flag = 1;
+			  }
+		   }
+		   if(ccwl_cwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+		   {
+			  contrl_cmd_frq = 0;
+			  ccwl_cwl_flag = 0;
+		   }
+		    pos.calc(&pos);
+		    pid1_fdb_bef.e_reg3 = _IQ24(((int32_t)contrl_cmd_frq)/((long)speed1.position_max *(float)position_loop_ps));
+		    pid1_fdb_bef.calc(&pid1_fdb_bef);
+
+		    _iq_pid1_spd_ref_bef = pid1_fdb_bef.e_reg3;//当前指令速度
+		    _iq_pid1_spd_ref_ek =  _iq_pid1_spd_ref_bef - _iq_pid1_spd_ref_next;//加速度
+		    _iq_pid1_spd_ref_next = _iq_pid1_spd_ref_bef;//当前速度付乱淮?
+
+		    contrl_sum_cmd_frq += (int32_t)contrl_cmd_frq; //当前位置指令
+		    contrl_sum_pos_frq += pos.fdb_frq;  //位置指令
+
+
+		    contrl.cmd_filt_xn = (int32_t)contrl_cmd_frq;
+
+		   	contrl.filt(&contrl);
+		    contrl_cmd_frq_ek = contrl.cmd_filt_out;
+
+		    contrl_fdb_frq_ek = (int32_t)pos.fdb_frq;
+		    pos_ek = (contrl_cmd_frq_ek) - (contrl_fdb_frq_ek);
+		    pos_sum_ek += pos_ek;
+		    pos_sum_ek_out = pos_sum_ek;
+
+		    pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);//pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);
+			pid1_pos.SpeedBefOut = pid1_fdb_bef.pid_out_reg3;
+		    pid1_pos.SpeedBefRef = pid1_fdb_bef.e_reg3;
+		    pid1_spd.SpeedBefRef = pid1_fdb_bef.e_reg3;
+			pid1_spd.SpeedAccOut = _iq_pid1_spd_ref_ek;
+		    pid1_pos.calc(&pid1_pos);
+
+            position_loop_count=1;
+    }
+    else
+    {
+            position_loop_count++;
+    }
+	if(speed_loop_count==speed_loop_ps)
+	{
+		   MS_SpeedLoop(pid1_pos.pid_out_reg3);
+		   speed_loop_count=1;
+	}
+	else
+	{
+		   speed_loop_count++;
+    }
+	MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+//力矩开环测试，主要为了验证编码器提供的电角度的准确性，与电流反馈等都无关
+void MS_TorqOpenTest(void)
+{
+	speed1.theta_new = encoder1.absa_theta_raw;
+	speed1.calc(&speed1);
+	speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+
+	cordic_cal_user(encoder1.etheta,&park1.Sine,&park1.Cosine);//三角函数计算
+	park_cal(&park1);
+	ipark1.Ds = 0;
+	if(Servo.Pn04.OpenVol.Data > 100)
+	{
+		Servo.Pn04.OpenVol.Data = 100;
+	}
+	ipark1.Qs = ((s32)Servo.Pn04.OpenVol.Data*_IQ(1.0))/100;//Fn.VdcInputVol;//都是0.1V精度
+	ipark1.Sine = park1.Sine;
+	ipark1.Cosine = park1.Cosine;
+	ipark_cal(&ipark1);
+	//SVPWM
+	//==========================================
+	svpwm1.Ualpha = ipark1.Alpha;
+	svpwm1.Ubeta = ipark1.Beta;
+	svpwm_cal(&svpwm1);
+	//更新PWM的占空比
+	(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+	(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+	(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+}
+void MS_Cur(void)
+{
+	if(speed_loop_count >= speed_loop_ps)
+	{
+         speed1.theta_new = encoder1.absa_theta_raw;
+		 speed1.calc(&speed1);
+		 speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+		 if(speed_spd == -1)speed_spd = 0;
+		 speed_loop_count = 1;
+	}
+	else
+	{
+		 speed_loop_count++;
+	}
+	if(HclSwitch.Hcl_EnableSw == 0)
+	{
+		MS_CurLoop(_IQ(Iq_testing));
+	}
+	else
+	{
+		hcl_set_idref(0,0);
+		hcl_set_iqref(0,_IQ(Iq_testing));
+	}
+}
+
+void MS_Cur_Withd_Test(void)
+{
+	u32 etheta;
+	s32 Sine,Cosine;
+	//产生一个角度thate
+	//由于显示面板最大只能输入32767,此处将原始频率乘以2.0倍
+	//如P4-04=20000,原始频率是20000*5/60 = 1666.6Hz，
+	//实际上给的频率放大2倍变为3333.33Hz
+	rg1.rmp_freq = _IQ(speed_ref*2.0);
+	rg1.calc(&rg1);
+	//电角度从IQ格式转换Q9
+	etheta = _IQtoIQ9(rg1.rmp_out);
+	etheta &= 0x1ff;
+
+    //获取正余弦值
+	Sine = _iq_sincos_tbl[etheta];
+	Cosine = _iq_sincos_tbl[etheta + 128];
+	//产生正弦电流给定指令
+	_iqsin_value = _IQmpy(_IQ(Iq_testing),Sine);
+	_iqcos_value = _IQmpy(_IQ(Iq_testing),Cosine);
+	if(HclSwitch.Hcl_EnableSw == 0)
+	{
+		//开始电流环运算
+		//CLARKE变换
+		//==========================================
+		#if(SDFM_USED == 1)
+		clark1.As = ilg2_vdc1.Imeas_a;		    //i_phu为Q15格式
+		clark1.Bs = ilg2_vdc1.Imeas_b;		    //i_phw为Q15格式
+		clarke_cal(&clark1);		            //输出为Q15格式
+		#else
+		clark1.As = ilg2_vdc1.Imeas_a<<1;		//i_phu为Q15格式
+		clark1.Bs = ilg2_vdc1.Imeas_b<<1;		//i_phw为Q15格式
+		clarke_cal(&clark1);		            //输出为Q15格式
+		#endif
+		//PARK变换
+		//==========================================
+		park1.Alpha = clark1.Alpha;	       //clark1.Alpha为Q15格式
+		park1.Beta  = clark1.Beta;	       //clark1.Beta为Q15格式
+
+		cordic_cal_user(encoder1.etheta,&park1.Sine,&park1.Cosine);//三角函数计算
+		park_cal(&park1);
+		//D\Q轴PI
+		//==========================================
+		pi_id1.Fbk = park1.Ds;
+		pi_iq1.Fbk = park1.Qs;
+
+		pi_id1.Ref = 0;
+		pi_iq1.Ref = _iqsin_value;
+
+		pi_cal(&pi_id1);
+		pi_cal(&pi_iq1);
+
+		//反PARK变换
+		//==========================================
+		ipark1.Ds = pi_id1.Out;
+		ipark1.Qs = pi_iq1.Out;
+		ipark1.Sine = park1.Sine;
+		ipark1.Cosine = park1.Cosine;
+		ipark_cal(&ipark1);
+
+		//SVPWM
+		//==========================================
+		svpwm1.Ualpha = ipark1.Alpha;
+		svpwm1.Ubeta = ipark1.Beta;
+		svpwm_cal(&svpwm1);
+
+		//更新PWM的占空比
+		(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+		(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+		(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+	}
+	else
+	{
+		//电流环给定幅值按照正弦变化
+		hcl_set_idref(0,0);
+		hcl_set_iqref(0,_iqsin_value);
+	}
+	if(speed_loop_count==speed_loop_ps)//速度检测
+	{
+		 speed1.theta_new = encoder1.absa_theta_raw;
+		 speed1.calc(&speed1);
+		 speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+		 if(speed_spd == -1)speed_spd = 0;
+		 speed_loop_count = 1;
+	}
+	else
+	{
+		 speed_loop_count++;
+	}
+}
+void MS_PositionLoop(s32 PulseCommand)
+{
+	s32 PulseCommand_tmp;
+	s64 ContrlCmdRefN;
+	PulseCommand_tmp = PulseCommand;
+	pos.calc(&pos);
+
+	ContrlCmdRefN = PulseCommand_tmp*ExternSerovN;
+	pid1_fdb_bef.e_reg3 = ContrlCmdRefN * ContrlCmdRefM;
+	pid1_fdb_bef.e_reg3 = 0;
+	pid1_fdb_bef.calc(&pid1_fdb_bef);
+	_iq_pid1_spd_ref_bef = pid1_fdb_bef.e_reg3;
+	_iq_pid1_spd_ref_ek =  _iq_pid1_spd_ref_bef - _iq_pid1_spd_ref_next;
+	_iq_pid1_spd_ref_next = _iq_pid1_spd_ref_bef;
+
+	contrl_sum_cmd_frq += PulseCommand_tmp;
+	contrl_sum_pos_frq += pos.fdb_frq;
+
+
+	contrl.cmd_filt_xn = PulseCommand_tmp*ExternSerovN;
+	contrl.filt(&contrl);
+	contrl_cmd_frq_ek = contrl.cmd_filt_out;
+
+	contrl_fdb_frq_ek = pos.fdb_frq*ExternSerovM;
+	pos_ek = (contrl_cmd_frq_ek) - (contrl_fdb_frq_ek);
+	pos_sum_ek += pos_ek;
+	pos_sum_ek_out = pos_sum_ek / ExternSerovM;
+
+	pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);//pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);
+	pid1_pos.SpeedBefOut = pid1_fdb_bef.pid_out_reg3;
+	pid1_spd.SpeedBefOut = pid1_fdb_bef.pid_out_reg3;
+	pid1_pos.SpeedBefRef = pid1_fdb_bef.e_reg3;
+	pid1_spd.SpeedBefRef = pid1_fdb_bef.e_reg3;
+	pid1_pos.SpeedAccOut = _iq_pid1_spd_ref_ek;
+	pid1_spd.SpeedAccOut = _iq_pid1_spd_ref_ek;
+	pid1_pos.calc(&pid1_pos);
+}
+void MS_PositionLoopNoGear(s32 PulseCommand)
+{
+	s32 PulseCommand_tmp;
+	s64 ContrlCmdRefN;
+	PulseCommand_tmp = PulseCommand;
+	pos.calc(&pos);
+
+	ContrlCmdRefN = PulseCommand_tmp*ExternSerovN;
+	pid1_fdb_bef.e_reg3 = ContrlCmdRefN * ContrlCmdRefM;
+	pid1_fdb_bef.e_reg3 = 0;
+	pid1_fdb_bef.calc(&pid1_fdb_bef);
+	_iq_pid1_spd_ref_bef = pid1_fdb_bef.e_reg3;
+	_iq_pid1_spd_ref_ek =  _iq_pid1_spd_ref_bef - _iq_pid1_spd_ref_next;
+	_iq_pid1_spd_ref_next = _iq_pid1_spd_ref_bef;
+
+	contrl_sum_cmd_frq += PulseCommand_tmp;
+	contrl_sum_pos_frq += pos.fdb_frq;
+
+
+	contrl.cmd_filt_xn = PulseCommand_tmp*1;
+	contrl.filt(&contrl);
+	contrl_cmd_frq_ek = contrl.cmd_filt_out;
+
+	contrl_fdb_frq_ek = pos.fdb_frq*1;
+	pos_ek = (contrl_cmd_frq_ek) - (contrl_fdb_frq_ek);
+	pos_sum_ek += pos_ek;
+	pos_sum_ek_out = pos_sum_ek / 1;
+
+	pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);//pos_pid_err_ctrl(Servo.Pn02.AbsaTypeCmd.Data);
+	pid1_pos.SpeedBefOut = pid1_fdb_bef.pid_out_reg3;
+	pid1_spd.SpeedBefOut = pid1_fdb_bef.pid_out_reg3;
+	pid1_pos.SpeedBefRef = pid1_fdb_bef.e_reg3;
+	pid1_spd.SpeedBefRef = pid1_fdb_bef.e_reg3;
+	pid1_pos.SpeedAccOut = _iq_pid1_spd_ref_ek;
+	pid1_spd.SpeedAccOut = _iq_pid1_spd_ref_ek;
+	pid1_pos.calc(&pid1_pos);
+}
+
+void MS_SpeedLoop(_iq SpdPidInput)
+{
+	_iq speed_tmp;
+	speed_tmp = SpdPidInput;
+
+	if(HclSwitch.Hcl_EnableSw == 1)//来自硬件电流环计算出来的反馈速度
+	{
+        if(Servo.Pn02.HclSpdfdbSourceSel.Data == 1)//速度反馈计算来自硬件电流环
+        {
+        	speed1.speed_input = (int32_t)(*HCL[Aixse1_HCL_NUM]).SPD_OUT1;//实际转速，IQ24
+			speed1.hcl_calc(&speed1);
+			speed_spd = _IQ24mpy(int_speed_max,speed1.speed_frq);
+        }
+        else
+        {
+        	speed1.theta_new = encoder1.absa_theta_raw;
+			speed1.calc(&speed1);
+			speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+        }
+	}
+	else
+	{
+		speed1.theta_new = encoder1.absa_theta_raw;
+		speed1.calc(&speed1);
+		speed_spd = _IQ24mpy(int_speed_max ,speed1.speed_frq);
+	}
+	pid1_spd.pid_ref_reg3 = speed_tmp;
+	pid1_spd.pid_fdb_reg3 = speed1.speed_frq;
+	pid1_spd.calc(&pid1_spd);
+}
+
+void MS_CurLoop(_iq IqPidInput )
+{
+	_iq cur_tmp;
+	cur_tmp = IqPidInput;
+    if(HclSwitch.Hcl_EnableSw == 0)
+	{
+
+    	//开始电流环运算
+		//CLARKE变换
+		//==========================================
+		#if(SDFM_USED == 1)
+		clark1.As = ilg2_vdc1.Imeas_a;		    //i_phu为Q15格式
+		clark1.Bs = ilg2_vdc1.Imeas_b;		    //i_phw为Q15格式
+		clarke_cal(&clark1);		            //输出为Q15格式
+		#else
+		clark1.As = ilg2_vdc1.Imeas_a<<1;		//i_phu为Q15格式
+		clark1.Bs = ilg2_vdc1.Imeas_b<<1;		//i_phw为Q15格式
+		clarke_cal(&clark1);		            //输出为Q15格式
+		#endif
+		//PARK变换
+		//==========================================
+		park1.Alpha = clark1.Alpha;	       //clark1.Alpha为Q15格式
+		park1.Beta  = clark1.Beta;	       //clark1.Beta为Q15格式
+
+		cordic_cal_user(encoder1.etheta,&park1.Sine,&park1.Cosine);//三角函数计算
+		park_cal(&park1);
+		//D\Q轴PI
+		//==========================================
+//		pi_id1.Fbk = park1.Ds;
+//		pi_iq1.Fbk = park1.Qs;
+		park_de_fil1.xn = park1.Ds;
+		park_de_fil1.calc(&park_de_fil1);
+		pi_id1.Fbk = park_de_fil1.yn;//id
+		park_qe_fil1.xn = park1.Qs;
+		park_qe_fil1.calc(&park_qe_fil1);
+		pi_iq1.Fbk = park_qe_fil1.yn;//iq
+
+
+		g_custom_data[sendflag * 4 + 0] = pi_id1.Fbk;//xu
+		g_custom_data[sendflag * 4 + 1] = pi_iq1.Fbk;
+		g_custom_data[sendflag * 4 + 3]= speed1.speed_rpm;
+
+
+		pi_id1.Ref = 0;
+		pi_iq1.Ref = cur_tmp;
+
+		pi_cal(&pi_id1);
+		pi_cal(&pi_iq1);
+
+		//反PARK变换
+		//==========================================
+		ipark1.Ds = pi_id1.Out;
+		ipark1.Qs = pi_iq1.Out;
+
+//		g_custom_data[sendflag * 4 + 0] = ipark1.Ds;//xu
+//		g_custom_data[sendflag * 4 + 1] = ipark1.Qs;
+
+		ipark1.Sine = park1.Sine;
+		ipark1.Cosine = park1.Cosine;
+		ipark_cal(&ipark1);
+
+		//SVPWM
+		//==========================================
+		svpwm1.Ualpha = ipark1.Alpha;
+		svpwm1.Ubeta = ipark1.Beta;
+		svpwm_cal(&svpwm1);
+
+		//更新PWM的占空比
+		(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+		(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+		(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+	}
+	else
+	{
+		if(HclSwitch.VoltCompEnableSw == 1)//打开电压补偿模块
+		{
+			(*HCL[0]).REG_BUS.bit.VAL = ilg2_vdc1.Vdc_meas;
+		}
+		hcl_set_idref(0,0);
+		hcl_set_iqref(0,cur_tmp);
+
+
+		g_custom_data[sendflag * 4 + 0] = pi_id1.Fbk;//xu
+		g_custom_data[sendflag * 4 + 1] = pi_iq1.Fbk;
+
+	}
+}
+void MS_Home_Pr(int64_t dist_value,int16_t speed_value,uint32_t acc_time,uint32_t dec_time)
+{
+	int64_t  MoveDist;
+	int16_t  MoveSpeed;
+	uint32_t AccTime,DecTime;
+
+	MoveSpeed = speed_value;
+	g_MovePos = dist_value;//相对于原点坐标的位置距离
+	AccTime = acc_time;
+	DecTime = dec_time;
+	if(1 == g_PosRefUpdateFlag)  //有更新位置值
+	{
+		if(g_MovePos)
+		{
+			LineIntpltInit(0,MoveSpeed,0,AccTime,DecTime,g_MovePos,&STR_XiLnIntplt);
+		}
+		g_PosRefUpdateFlag =0;
+	}
+
+	if(position_loop_count == position_loop_ps)
+	{
+		 contrl.cmd_frq = LineIntplt(&STR_XiLnIntplt);
+
+		 if(Servo.Pn01.MotorDir.Data == 0)
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 1)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else if(Servo.Pn01.MotorDir.Data == 2)
+		 {
+			contrl_cmd_frq = contrl.cmd_frq;
+		 }
+		 else
+		 {
+			contrl_cmd_frq = -contrl.cmd_frq;
+		 }
+
+		 if(contrl_cmd_frq > 0)
+		 {
+			 cwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CCWL == 1)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CCWL == 0)
+				 {
+					 ccwl_flag = 1;
+				 }
+			 }
+			 if(ccwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			 {
+				 contrl_cmd_frq = 0;
+			 }
+		 }
+		if(contrl_cmd_frq < 0)
+		{
+			 ccwl_flag = 0;
+			 if(Servo.Pn02.RunLimitDir.Data == 0)
+			 {
+				 if(IoDi.DI_CWL == 1)
+				 {
+					 cwl_flag = 1;
+				 }
+			 }
+			 else
+			 {
+				 if(IoDi.DI_CWL == 0)
+				 {
+					 cwl_flag = 1;
+				 }
+			  }
+			  if(cwl_flag == 1 && Servo.Pn02.CcwCwEnable.Data == 0)
+			  {
+				contrl_cmd_frq = 0;
+			  }
+		}
+		if(MotorDuoXingStopFlag == 1)
+		{
+			 contrl_cmd_frq = 0;
+		}
+		MS_PositionLoopNoGear(contrl_cmd_frq);
+		position_loop_count = 1;
+	}
+	else
+	{
+		position_loop_count++;
+	}
+	if(speed_loop_count == speed_loop_ps)
+	{
+		MS_SpeedLoop(pid1_pos.pid_out_reg3);
+		speed_loop_count = 1;
+	}
+	else
+	{
+		speed_loop_count++;
+	}
+
+	MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+}
+void MS_AbsaAxise_Home(void)
+{
+	switch(back_zero_flag)
+	{
+		case 0:
+			 if(Fn.MotorSpd > -1 && Fn.MotorSpd < 1)
+			 {
+					back_zero_flag = 1;
+					contrl_cmd_frq = 0;
+					encoder1.HomeAxisCur = encoder1.AbsaAxisData17bit;//经常电子齿轮比计算后的位置反馈数据
+					contrl_sum_cmd_frq = 0;
+					contrl_sum_pos_frq = 0;
+			 }
+			 MS_Ps_DaoKu(0);
+		break;
+		case 1:
+			 if(Servo.Pn01.HomeThirdSpeed.Data == 0)
+			 {
+					back_zero_flag = 0;
+					Servo.Pn01.AutoHomeFlag.Data = 0;
+					DI_SHOME_Enable = 0;
+					PTRG_enable = 0;
+					contrl_sum_cmd_frq = 0;
+					contrl_sum_pos_frq = 0;
+			 }
+			 else
+			 {
+					back_zero_flag = 2;
+					DaoRunPulseSum = encoder1.HomeAxisCur - encoder1.AbsaAxisSave;//计算相对位置
+					g_PosRefUpdateFlag = 1;//更新标志置1
+			 }
+			 MS_Ps_DaoKu(0);
+		break;
+
+		case 2:
+			 MS_Home_Pr(DaoRunPulseSum,
+					Servo.Pn01.HomeThirdSpeed.Data,
+					Servo.Pn02.PrIncTime.Data,
+					Servo.Pn02.PrDecTime.Data);
+			 if(STR_XiLnIntplt.IntpltStatus == 0)
+			 {
+				 if(abs(encoder1.AbsaAxisSave - encoder1.AbsaAxisData17bit) <= Servo.Pn01.PosNearWidth.Data)
+				 {
+						back_zero_flag = 0;
+						Servo.Pn01.AutoHomeFlag.Data = 0;
+						DI_SHOME_Enable = 0;
+						contrl_sum_cmd_frq = 0;
+						contrl_sum_pos_frq = 0;
+				 }
+			 }
+		 break;
+		 default:break;
+	}
+}
+
+void back_to_zero_point(void)
+{
+    int32_t Curtmp1;
+    int32_t Curtmp2;
+    int32_t Savetmp3;
+    int32_t Savetmp4;
+    contrl.cmd_new =  ExPulseTimerCnt;
+    contrl.cmd_old = contrl.cmd_new;
+    if(Servo.Pn00.SysReset.Data != 1)
+	{
+		  Servo.Pn00.SysReset.Data = 0;
+	}
+
+	MS_AbsaAxise_Home( );
+
+}
+s32 CodeAdjustMode = 0;
+/*第一种电机调零方法是保存U相零点偏移方法
+ * P1-00 = 14
+ * P0-02 = 2
+ */
+void MS_CO1(void)
+{
+	if(Servo.Pn00.ParDefExe.Data == 2)
+    {
+		CodeAdjustFinishCnt++;
+		MS_Hcl_Clr(Aixse1_HCL_NUM);//禁止和清除硬件电流环
+		switch(CodeAdjustMode)
+		{
+				case 0:
+					pwm1.pwm_on(&pwm1);
+					if(svpwm1.Ualpha <= _IQ(0.1))
+					{
+					   svpwm1.Ualpha = svpwm1.Ualpha + (_IQ(0.1) / 200);
+					}
+					else
+					{
+						svpwm1.Ualpha = _IQ(0.1);
+						CodeAdjustFinishCnt = 0;
+						CodeAdjustMode = 1;
+					}
+					svpwm1.Ubeta = 0;
+					svpwm_cal(&svpwm1);
+
+					//更新PWM的占空比
+					(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+					(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+					(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+				break;
+				case 1:
+					svpwm_cal(&svpwm1);
+					//更新PWM的占空比
+					(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+					(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+					(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+					if(CodeAdjustFinishCnt >= 20000)
+					{
+						absa_single_reset(0);//编码器单圈复位
+					}
+					if(CodeAdjustFinishCnt >= 20030)//复位30次
+					{
+						//获取当前编码器位置数据并转成角度值
+						Servo.Pn02.ZeroOffset.Data = 0;
+						//保存U相零点偏移角度
+						Servo.Pn02.ZeroOffset.attri.bit.Save = 1;
+						CodeAdjustMode = 2;
+					}
+				break;
+				case 2:
+					if(Servo.Pn02.ZeroOffset.attri.bit.Save == 0)//参数保存成功
+					{
+						pwm1.pwm_off(&pwm1);//关闭EPWM
+						CodeAdjustFinishCnt = 0;
+						Servo.Pn00.ParDefExe.Data = 0;
+						Servo.Pn00.SysReset.Data = 1;//系统复位
+					}
+				break;
+				default:break;
+		}
+    }
+}
+/*第二种电机调零方法是保存U相零点偏移方法
+ * P1-00 = 16
+ * P0-02 = 2
+ */
+void MS_CO2(void)
+{
+	if(Servo.Pn00.ParDefExe.Data == 2)
+    {
+		CodeAdjustFinishCnt++;
+		MS_Hcl_Clr(Aixse1_HCL_NUM);//禁止和清除硬件电流环
+		switch(CodeAdjustMode)
+		{
+				case 0:
+					pwm1.pwm_on(&pwm1);
+					if(svpwm1.Ualpha <= _IQ(0.1))
+					{
+					   svpwm1.Ualpha = svpwm1.Ualpha + (_IQ(0.1) / 200);
+					}
+					else
+					{
+						svpwm1.Ualpha = _IQ(0.1);
+						CodeAdjustFinishCnt = 0;
+						CodeAdjustMode = 1;
+					}
+					svpwm1.Ubeta = 0;
+					svpwm_cal(&svpwm1);
+
+					//更新PWM的占空比
+					(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+					(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+					(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+				break;
+				case 1:
+					svpwm_cal(&svpwm1);
+					//更新PWM的占空比
+					(*EPWM[Aixse1_EPWM_U]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Ta;
+					(*EPWM[Aixse1_EPWM_V]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tb;
+					(*EPWM[Aixse1_EPWM_W]).PWM_CNT_AV.bit.CNT_AV = svpwm1.Tc;
+					if(CodeAdjustFinishCnt >= 20000)
+					{
+						//获取当前编码器位置数据并转成角度值
+						Servo.Pn02.ZeroOffset.Data = ((float)encoder1.AbsaSingleData / EncodeLine)*3600;
+						//保存U相零点偏移角度
+						Servo.Pn02.ZeroOffset.attri.bit.Save = 1;
+						CodeAdjustMode = 2;
+					}
+				break;
+				case 2:
+					if(Servo.Pn02.ZeroOffset.attri.bit.Save == 0)//参数保存成功
+					{
+						pwm1.pwm_off(&pwm1);//关闭EPWM
+						CodeAdjustFinishCnt = 0;
+						Servo.Pn00.ParDefExe.Data = 0;
+						Servo.Pn00.SysReset.Data = 1;//系统复位
+					}
+				break;
+				default:break;
+		}
+    }
+}
+void MS_JOG(void)
+{
+    pos.calc(&pos);
+    pos_ek = 0;
+    pos_sum_ek = 0;
+    contrl_sum_pos_frq += pos.fdb_frq;
+
+    if(speed_loop_count >= speed_loop_ps)
+    {
+		switch(JogMode)
+		{
+			case 0:
+				if(key_code == KEY_UP)//正转
+				{
+					JogMode = 1;
+				}
+				else if(key_code == KEY_DOWN)//反转
+				{
+					JogMode = 2;
+				}
+				Jog_no_key_cnt = 0;
+			break;
+			case 1:
+				if(key_code == KEY_UP)//有按键输入
+				{
+					spd_rc1.target_value = Servo.Pn04.JogSpeed.Data;
+					Jog_no_key_cnt = 0;
+				}
+				else
+				{
+					if(Jog_no_key_cnt >= 1000)  //无按键输入，延时100ms
+					{
+						 spd_rc1.target_value = 0;
+						 key_code = 0;
+						 JogMode = 0;
+					}
+					else
+					{
+						Jog_no_key_cnt++;
+					}
+				}
+			break;
+			case 2:
+				if(key_code == KEY_DOWN)//有按键输入
+				{
+					spd_rc1.target_value = -Servo.Pn04.JogSpeed.Data;
+					Jog_no_key_cnt = 0;
+				}
+				else
+				{
+					if(Jog_no_key_cnt >= 1000)  //无按键输入，延时100ms
+					{
+						 spd_rc1.target_value = 0;
+						 key_code = 0;
+						 JogMode = 0;
+					}
+					else
+					{
+						 Jog_no_key_cnt++;
+					}
+				}
+			break;
+		}
+		 //MotorUvwErrChk(spd_rc1.setpt_value);
+
+		 spd_rc1.calc(&spd_rc1);
+
+		 MS_SpeedLoop(spd_rc1.setpt_value);
+		 speed_loop_count = 1;
+   }
+   else
+   {
+	     speed_loop_count++;
+   }
+    MS_CurLoop(_IQ24toIQ(pid1_spd.pid_out_reg3));
+
+}
+int16_t cur_disp = 0;
+int16_t def0 = 0;
+void motor_para_cala(void)
+{
+	  int32_t tmp;
+	  def0 = Def_NUM;
+	  slaver_dp_data[0] = 0;
+	  slaver_dp_data[1] = Fn.PosFrqLow;
+	  slaver_dp_data[2] = Fn.PosFrqHigh;
+	  slaver_dp_data[3] = Fn.CmdRefLow;;
+	  slaver_dp_data[4] = Fn.CmdRefHigh;
+	  slaver_dp_data[5] = Fn.PosErrLow;
+	  slaver_dp_data[6] = Fn.PosErrHigh;
+	  slaver_dp_data[7] = cmd_hz.cmd_frq;
+	  slaver_dp_data[8] = Fn.MotorSpd;
+	  slaver_dp_data[9] = Fn.ImeasAd0Ref;
+	  slaver_dp_data[10] = Fn.ImeasAd1Ref;
+	  slaver_dp_data[11] = Fn.VdcInputVol;
+	  slaver_dp_data[12] = 0;
+	  slaver_dp_data[13] = Fn.CurAlarmRef;
+	  slaver_dp_data[14] = Fn.TorqueFdb;
+	  slaver_dp_data[15] = Fn.ThetaIncLow;
+	  slaver_dp_data[16] = Fn.ThetaIncHigh;
+	  slaver_dp_data[17] = Io_Input_state;
+	  slaver_dp_data[18] = 0;
+	  slaver_dp_data[19] = 0;
+	  slaver_dp_data[20] = ServoRunState;
+	  if(Err.AbsaBatteryLowFlag == 1 )
+	  {
+		  slaver_dp_data[21] = ABSA_BATTERY_LOW;
+	  }
+	  else
+	  {
+		  slaver_dp_data[21] = svo_alm1[0];
+	  }
+	  slaver_dp_data[22] = ilg2_vdc1.SpdInputVol*1000;
+	  slaver_dp_data[23] = ilg2_vdc1.TrInputVol*1000;
+	  /*****************原点坐标位置保存*******************/
+	  slaver_dp_data[24] = encoder1.AbsaAxisSaveL;
+	  slaver_dp_data[25] = encoder1.AbsaAxisSaveH;
+	  slaver_dp_data[26] = 0;
+	  slaver_dp_data[27] = 0;
+	  /*****************当前坐标位置保存******************/
+
+	  slaver_dp_data[29] = encoder1.AbsaAxisCurL;
+	  slaver_dp_data[30] = encoder1.AbsaAxisCurH;
+	  slaver_dp_data[31] = 0;
+	  slaver_dp_data[32] = 0;
+	  slaver_dp_data[33] = 0;    //编码器报警状态字
+	  Fn.PosFrqHigh = encoder1.absa_theta_raw / 10000;
+	  Fn.PosFrqLow = encoder1.absa_theta_raw % 10000;
+
+  	  Fn.CmdRefHigh = contrl_sum_cmd_frq / 10000;
+  	  Fn.CmdRefLow = contrl_sum_cmd_frq % 10000;
+
+  	  Fn.PosErrHigh = pos_sum_ek_out / 10000;
+  	  Fn.PosErrLow = pos_sum_ek_out % 10000;
+
+  	  Fn.ThetaIncHigh = encoder1.AbsaCircleData / 10000;
+	  Fn.ThetaIncLow = encoder1.AbsaCircleData % 10000;
+
+  	  Fn.ImeasAd0Ref = ((int32_t)ilg2_vdc1.Imeas_a *2.5*1000) / 4096;
+  	  Fn.ImeasAd1Ref = ((int32_t)ilg2_vdc1.Imeas_b *2.5*1000) / 4096;
+//      MS_PulseCommand_Mode();
+      /*
+       * 死区补偿
+       */
+      if(Servo.Pn04.DeadVolValue.Data != 0)
+      {
+    	  hcl_set_dtcomp(Aixse1_HCL_NUM, Servo.Pn04.DeadVolValue.Data);
+      }
+
+      /*
+  	   * 判断电流环选择参数是否发生改变
+  	   */
+  	  HclEnableSw_new = Servo.Pn01.HclEnableSw2.Data;
+  	  if((HclEnableSw_new != HclEnableSw_old)&&Servo.Pn01.HclEnableSw2.attri.bit.Save == 0)
+  	  {
+  		Servo.Pn00.SysReset.Data = 1;
+  	  }
+  	  HclEnableSw_old = HclEnableSw_new;
+
+  	  HclSwitch.OverMode2_EnableSw = (Servo.Pn01.HclEnableSw1.Data % 10);     //过调制2区开关P1-14个位
+	  HclSwitch.VoltCompEnableSw = (Servo.Pn01.HclEnableSw1.Data%100)/10;     //电压补偿开关,P1-14十位
+	  HclSwitch.ElecVolCompEnableSw = (Servo.Pn01.HclEnableSw1.Data%1000)/100;//反电动势补偿开关,P1-14百位
+	  HclSwitch.SdfmFromRegSw = (Servo.Pn01.HclEnableSw1.Data%10000)/1000;  //硬件电流环SDFM获取数据来源,P1-14千位
+
+  	  HclSwitch.Hcl_EnableSw = (Servo.Pn01.HclEnableSw2.Data % 10);           //硬件电流环使能开关,P1-15个位
+	  HclSwitch.Sdfm_sync_EnableSw = (Servo.Pn01.HclEnableSw2.Data%100)/10;   //SDFM同步采样开关,P1-15十位
+	  HclSwitch.ElecComp_EnableSw = (Servo.Pn01.HclEnableSw2.Data%1000)/100;  //电角度补偿开关,P1-15百位
+	  HclSwitch.DeadComp_EnableSw = (Servo.Pn01.HclEnableSw2.Data%10000)/1000;//死区补偿开关,P1-15千位
+
+
+	  if(HclSwitch.Hcl_EnableSw == 0)
+      {
+		pi_id1.Kp= _IQ((float)Servo.Pn02.CurKp.Data/(float)Servo.Pn02.CurKp.Unit);
+		pi_id1.Ki=_IQ(1.0f/(float)Servo.Pn02.CurKi.Data);
+		pi_id1.Umax =_IQ(0.95);
+		pi_id1.Umin =_IQ(-0.95);
+
+		//IQ电流参数初始化
+		pi_iq1.Kp= _IQ((float)Servo.Pn02.CurKp.Data/(float)Servo.Pn02.CurKp.Unit);
+		pi_iq1.Ki=_IQ(1.0f/(float)Servo.Pn02.CurKi.Data);
+		pi_iq1.Umax =_IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit);
+		pi_iq1.Umin =-_IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit);
+
+
+		park_qe_fil1.K1 = _IQ((float)Servo.Pn02.CurBackFilterK.Data/(float)Servo.Pn02.CurBackFilterK.Unit);
+		park_de_fil1.K1 = _IQ((float)Servo.Pn02.CurBackFilterK.Data/(float)Servo.Pn02.CurBackFilterK.Unit);
+		park_qe_fil1.low_pass_max = _IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit);
+		park_qe_fil1.low_pass_min = -_IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit);
+		park_de_fil1.low_pass_max = _IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit);
+		park_de_fil1.low_pass_min = -_IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit);
+      }
+      else if(hcl_reg_update_enable == 1)
+      {
+    	MS_Hcl_Reg_Update(Aixse1_HCL_NUM);   //硬件电流环补偿模块寄存器设置
+		tmp = _IQ((float)Servo.Pn02.CurKp.Data/(float)Servo.Pn02.CurKp.Unit);
+		if(tmp >= _IQ(16))
+		{
+			tmp = _IQ(16);
+		}
+		hcl_set_qpidkp(Aixse1_HCL_NUM, tmp);
+		hcl_set_qpidki(Aixse1_HCL_NUM, _IQ(1.0f/(float)Servo.Pn02.CurKi.Data));
+		hcl_set_qpidmax(Aixse1_HCL_NUM, _IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit));//0.9
+		hcl_set_qpidmin(Aixse1_HCL_NUM, -_IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit));//-0.9
+		hcl_set_intgsep(Aixse1_HCL_NUM, _IQ(0.9));//0.9
+
+
+		//set daxi-pid
+		tmp = _IQ((float)Servo.Pn02.CurKp.Data/(float)Servo.Pn02.CurKp.Unit);
+		if(tmp >= _IQ(16))
+		{
+			tmp = _IQ(16);
+		}
+		hcl_set_dpidkp(Aixse1_HCL_NUM, tmp);
+		hcl_set_dpidki(Aixse1_HCL_NUM, _IQ(1.0f/(float)Servo.Pn02.CurKi.Data));
+		hcl_set_dpidmax(Aixse1_HCL_NUM, _IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit));
+		hcl_set_dpidmin(Aixse1_HCL_NUM, -_IQ((float)Servo.Pn02.CurPidOutLimit.Data/(float)Servo.Pn02.CurPidOutLimit.Unit));
+		//hcl_set_dpidmax(Aixse1_HCL_NUM, _IQ( 0.125));
+		//hcl_set_dpidmin(Aixse1_HCL_NUM, _IQ(-0.125));
+		hcl_set_dtcomp(Aixse1_HCL_NUM, Servo.Pn04.DeadVolValue.Data);//死区补偿值
+		hcl_set_dtflt(Aixse1_HCL_NUM, Servo.Pn04.DeadTime.Data);//死区补偿滤波
+		hcl_set_absmax(Aixse1_HCL_NUM, (HCL_EncodeLine));//ABS最大位置值(编码器的分辨率)
+		hcl_set_abs_elec_max(Aixse1_HCL_NUM, HCL_EncodeLine / Servo.Pn02.Pairs.Data);//ABS最大电角度值,131072(编码器分辨率)/5(极对数)
+		hcl_set_abs_elec_fact(Aixse1_HCL_NUM, _IQ24(2/(float)(*HCL[Aixse1_HCL_NUM]).ABS_ELECT_MAX.bit.VAL)); //ABS电角度转换系数 _IQ24( 2/ABS_ELEC_MAX)
+      }
+	  Vq_testing = Servo.Pn04.OpenVol.Data/(310.0*Servo.Pn04.OpenVol.Unit);
+	  Iq_testing = Servo.Pn04.OpenVol.Data / 10000.0;
+	  speed_ref = Servo.Pn04.OpenSpeed.Data/(float)int_speed_max;
+
+	  BASE_FREQ = Servo.Pn02.BaseFreMax.Data;
+	  int_speed_max = (int32_t)(60*BASE_FREQ/Servo.Pn02.Pairs.Data);
+	  _iq15MotorSpeedMax = _IQ15(60*BASE_FREQ/Servo.Pn02.Pairs.Data);
+	  rg1.step_angle_max = _IQ(BASE_FREQ*PWM_T);
+	  spd_rc1.rmp_spd_max = (int32_t)(60*BASE_FREQ/Servo.Pn02.Pairs.Data);
+
+	  if(Servo.Pn02.IsrFrequency.Data == 0) //10khz
+	  {
+		  PWM_T = 0.001f/ISR_FREQUENCY1;
+		  //计算最高转速下，PWM_T时间内出现的最大脉冲数
+		  speed1.position_max = (int64_t)int_speed_max *EncodeLine / 60.0 * PWM_T;
+		  STR_FUNC_Gvar.System.ToqFreq = ISR_FREQUENCY1 * 1000;
+		  STR_FUNC_Gvar.System.SpdFreq = STR_FUNC_Gvar.System.ToqFreq * speed_loop_ps;
+		  STR_FUNC_Gvar.System.PosFreq = STR_FUNC_Gvar.System.ToqFreq * position_loop_ps;
+		  spd_rc1.rmp_dly_max = 10 / speed_loop_ps;//加减速最小时间单位位1ms
+	  }
+	  else if(Servo.Pn02.IsrFrequency.Data == 1)  //12.5khz
+	  {
+		  PWM_T = 0.001f/ISR_FREQUENCY2;
+		  //计算最高转速下，PWM_T时间内出现的最大脉冲数
+		  speed1.position_max = (int64_t)int_speed_max *EncodeLine / 60.0 * PWM_T;
+		  STR_FUNC_Gvar.System.ToqFreq = ISR_FREQUENCY2 * 1000;
+		  STR_FUNC_Gvar.System.SpdFreq = STR_FUNC_Gvar.System.ToqFreq * speed_loop_ps;
+		  STR_FUNC_Gvar.System.PosFreq = STR_FUNC_Gvar.System.ToqFreq * position_loop_ps;
+		  spd_rc1.rmp_dly_max = 12.5 / speed_loop_ps;
+	  }
+	  else if(Servo.Pn02.IsrFrequency.Data == 2) //16khz
+	  {
+		  PWM_T = 0.001f/ISR_FREQUENCY3;
+		  //计算最高转速下，PWM_T时间内出现的最大脉冲数
+		  speed1.position_max = (int64_t)int_speed_max *EncodeLine / 60.0 * PWM_T;
+		  STR_FUNC_Gvar.System.ToqFreq = ISR_FREQUENCY3 * 1000;
+		  STR_FUNC_Gvar.System.SpdFreq = STR_FUNC_Gvar.System.ToqFreq * speed_loop_ps;
+		  STR_FUNC_Gvar.System.PosFreq = STR_FUNC_Gvar.System.ToqFreq * position_loop_ps;
+		  spd_rc1.rmp_dly_max = 16 / speed_loop_ps;
+	  }
+	  else if(Servo.Pn02.IsrFrequency.Data == 3) //20khz
+	  {
+		  PWM_T = 0.001f/ISR_FREQUENCY4;
+		  //计算最高转速下，PWM_T时间内出现的最大脉冲数
+		  speed1.position_max = (int64_t)int_speed_max *EncodeLine / 60.0 * PWM_T;
+		  STR_FUNC_Gvar.System.ToqFreq = ISR_FREQUENCY4 * 1000;
+		  STR_FUNC_Gvar.System.SpdFreq = STR_FUNC_Gvar.System.ToqFreq * speed_loop_ps;
+		  STR_FUNC_Gvar.System.PosFreq = STR_FUNC_Gvar.System.ToqFreq * position_loop_ps;
+		  spd_rc1.rmp_dly_max = 20 / speed_loop_ps;
+	  }
+	  STR_FUNC_Gvar.System.RPM2PPPtCoefQ16 = ((uint64_t)EncodeLine << 16)
+	                                                   / ((uint64_t)60* STR_FUNC_Gvar.System.PosFreq);
+      IsrFrequency_new = Servo.Pn02.IsrFrequency.Data;
+	  if((IsrFrequency_new != IsrFrequency_old)&&Servo.Pn02.IsrFrequency.attri.bit.Save == 0)
+	  {
+		Servo.Pn00.SysReset.Data = 1;
+	  }
+	  IsrFrequency_old = IsrFrequency_new;
+	  fenmu = (int32_t)Servo.Pn01.N4.Data * 10000 + Servo.Pn01.N3.Data;
+	  if(fenmu == 0)
+	  {
+		  ExternSerovN = (int32_t)(Servo.Pn01.N2.Data*10000L + Servo.Pn01.N1.Data);
+		  ExternSerovM = Servo.Pn01.M1.Data;
+	  }
+	  else
+	  {
+		  fenzi = EncodeLine;//编码器分辨率
+		  ExternSerovN = fenzi;
+		  ExternSerovM = fenmu;
+	  }
+	  MotorType_new = Servo.Pn01.MotorType.Data;
+	  if(MotorType_new != MotorType_old)
+	  {
+		  Servo.Pn00.ParDefExe.Data = 1;
+	  }
+	  MotorType_old = MotorType_new;
+	  AbsaTypeCmd_new = Servo.Pn02.AbsaTypeCmd.Data;
+	  if((AbsaTypeCmd_new != AbsaTypeCmd_old)&&Servo.Pn02.AbsaTypeCmd.attri.bit.Save == 0)
+	  {
+		Servo.Pn00.SysReset.Data = 1;
+	  }
+	  AbsaTypeCmd_old = AbsaTypeCmd_new;
+	  if(Servo.Pn02.AbsaTypeCmd.Data == 0)
+	  {
+		  pid1_pos.Kp_reg3 = _IQ24(Servo.Pn02.PosKp.Data/(float)(Servo.Pn02.PosKp.Unit));
+	  }
+	  else
+	  {
+		  pid1_pos.Kp_reg3 = _IQ24(Servo.Pn02.PosKp.Data/100.0);
+	  }
+	  encoder_line_sel(Servo.Pn02.AbsaTypeCmd.Data);//根据P2-58设置的值选择对应的编码器分辨率
+	  pos_bef_fil1.K1 = _IQ24(1/(1+PWM_T*position_loop_ps*2*PI*Servo.Pn02.SpdBefFilterTc.Data));
+	  pid1_fdb_bef.Kp_reg3 = _IQ24(Servo.Pn02.SpdBefKp.Data/(float)(Servo.Pn02.SpdBefKp.Unit));
+	  pr1.position_max = speed1.position_max;
+	  speed1.speed_max = _IQ24(1.0f/((float)speed1.position_max *speed_loop_ps));
+	  _floatSpdBackFilterK = Servo.Pn02.SpdBackFilterK.Data/(float)(Servo.Pn02.SpdBackFilterK.Unit);
+	  _floatSpdBackFilter1 = Servo.Pn04.SpdBackFilter1.Data*_floatSpdBackFilterK;
+	  _floatSpdBackFilter2 = Servo.Pn04.SpdBackFilter2.Data*_floatSpdBackFilterK;
+	  _iqSpdBackFilter1 = _IQ24(1/(1+PWM_T*speed_loop_ps*2*PI*_floatSpdBackFilter1));
+	  _iqSpdBackFilter2 = _IQ24(1/(1+PWM_T*speed_loop_ps*2*PI*_floatSpdBackFilter2));
+	  _iqSpdBackFilterChg1 = _IQ24(Servo.Pn02.SpdBackFilterChg1.Data/3000.0);
+	  pid1_spd.Kp1_reg3 = _IQ24((float)Servo.Pn02.SpdKp.Data/(float)Servo.Pn02.SpdKp.Unit);
+	  pid1_spd.Kp2_reg3 = pid1_spd.Kp1_reg3;
+	  SpdKpChgK = _IQ24(Servo.Pn02.SpdKpChgK.Data/(float)(Servo.Pn02.SpdKpChgK.Unit));
+	  pid1_spd.Kp3_reg3 = _IQ24mpy(pid1_spd.Kp1_reg3,SpdKpChgK);
+
+	  pid1_spd.Ki1_reg3 = _IQ24(1.0f/(float)Servo.Pn02.SpdKi.Data);
+	  pid1_spd.Ki2_reg3 = _IQ24(1.0f/(float)Servo.Pn02.SpdKi2.Data);
+	  pid1_spd.Kc_reg3 = _IQ24((float)Servo.Pn04.SpdPidKc.Data/(float)Servo.Pn04.SpdPidKc.Unit);
+	  pid1_spd.pid_p_sel = Servo.Pn02.PidTypeSel.Data;
+
+	  pid1_spd.pi_ek_max = _IQ24((float)Servo.Pn02.SpeedChgRef.Data/3000.0f);
+	  pid1_spd.pi_ek_min = -pid1_spd.pi_ek_max;
+
+	  pid1_spd.speed_frq_max = _IQ24((float)Servo.Pn02.SpdKpChgValue.Data/3000.0f);
+	  pid1_spd.speed_frq_min = -pid1_spd.speed_frq_max;
+	  _iqpid_spd_out_Limit = _IQ24((float)Servo.Pn02.SpdPidOutLimit.Data/(float)Servo.Pn02.SpdPidOutLimit.Unit);
+	  pid1_spd.pid_out_max = _iqpid_spd_out_Limit;
+	  pid1_spd.pid_out_min = -_iqpid_spd_out_Limit;
+
+	  pid1_spd.speed_frq_max = _IQ24(Servo.Pn02.SpdKpChgValue.Data/3000.0);
+	  pid1_spd.speed_frq_min = -pid1_spd.speed_frq_max;
+
+	  Err.maniPower0ffPs = 1000*(int32_t)Servo.Pn04.MainPowerOffDelayTime.Data;
+	  Err.MainPowerHighPs = 1000*(int32_t)Servo.Pn04.MainPowerHighDelayTime.Data;
+	  Err.MainPowerLowPs = 1000*(int32_t)Servo.Pn04.MainPowerLowDelayTime.Data;
+	  Err.BrakeAlarmPs = 1000*(int32_t)Servo.Pn04.MainPowerBarkeDelayTime.Data;
+	  Err.TempHighPs =  1000*(int32_t)Servo.Pn04.IgbtHighTmpDelayTime.Data;
+
+	  ol_pulse_send_ctrl(Servo.Pn02.AbsaTypeCmd.Data);
+
+      _iqPositionMax = _IQ24(1.0f/ ((float)speed1.position_max *position_loop_ps));
+	  ContrlCmdRefM = _IQ24(1.0f/ ((float)speed1.position_max *ExternSerovM*position_loop_ps));
+
+	  back_zero_offset = (int32_t)Servo.Pn01.HomeZeroCircle.Data*10000 + Servo.Pn01.HomeZeroOffset.Data;
+
+
+	  contrl.cmd_filt_en = (int32_t)Servo.Pn02.PosCmdFilterSw.Data;
+	  contrl.cmd_filt_k = (int32_t)Servo.Pn02.PosCmdFilterK.Data;
+
+		//_iq_T_k = _IQ((Servo.Pn01.RatedCurrent.Data*10.0 /(float)Servo.Pn01.CurSampleMax.Data)*(Servo.Pn02.AdcTurRefMax.Data / (float)(Servo.Pn02.AdcTurRefMax.Unit)));//以电机额定电流为标值,除以10是因为P1-63和P1-64单位不一样。
+	  TurLimitMinKp = _IQ24(Servo.Pn04.TurLimitMinKp.Data / (float)Servo.Pn04.TurLimitMinKp.Unit);
+	  TorqueLimintK = _IQ24(Servo.Pn02.TorqueLimintK.Data / 1000.0);
+	  MotorBackZeroTrLimit = _IQ24mpy(TorqueLimintK,_IQ24(Servo.Pn01.HomeTrLimit.Data / (float)(Servo.Pn01.HomeTrLimit.Unit)));
+	  MotorBackZeroTrLimit1 = _IQ24mpy(TorqueLimintK,_IQ24((int32_t)Servo.Pn04.TurLimit1.Data * Servo.Pn01.RatedCurrent.Data / (float)(Servo.Pn01.CurSampleMax.Data)/100));
+	  MotorBackZeroTrLimit2 = _IQ24mpy(TorqueLimintK,_IQ24((int32_t)Servo.Pn04.TurLimit2.Data * Servo.Pn01.RatedCurrent.Data / (float)(Servo.Pn01.CurSampleMax.Data)/100));
+	  MotorBackZeroTrLimit3 = _IQ24mpy(TorqueLimintK,_IQ24((int32_t)Servo.Pn04.TurLimit3.Data * Servo.Pn01.RatedCurrent.Data / (float)(Servo.Pn01.CurSampleMax.Data)/100));
+	  long_I_eqv_max = (int32_t)Servo.Pn01.CurSampleMax.Data/1.414;
+	  int_I_alm_gate = (int16_t)((int32_t)Servo.Pn01.RatedCurrent.Data*(int32_t)Servo.Pn01.CurOverMax.Data / 10);
+	  int_I_alm_gate2 = (int16_t)((int32_t)Servo.Pn01.RatedCurrent.Data*(int32_t)Servo.Pn01.LoadOverMax.Data / 10);
+	  SpdPidOutLimit = _IQ24(Servo.Pn02.SpdPidOutLimit.Data/(float)(Servo.Pn02.SpdPidOutLimit.Unit));
+	  Err.MotorRunMaxCur = _IQ24mpy(SpdPidOutLimit,long_I_eqv_max);
+	  TorqueArrtimeRef = (int32_t)Servo.Pn02.TorqueArrtimeRef.Data * 10;
+	  HoldDelayTimeRef = (int32_t)Servo.Pn02.HoldDelayTime.Data * 10;
+
+	  TrArriveTimeRef =  (int32_t)Servo.Pn01.CurOverDelay.Data* 1000;
+	  HomeTrArriveTimeRef = (int32_t)Servo.Pn01.HomeTrArriveDelay.Data* 1000;
+	  HomeStopTimeDelay = (int32_t)Servo.Pn02.HomeDelayTime.Data * 10;
+	  long_Pr_time_delay1 = (int32_t) (Servo.Pn02.AutoTimer1.Data)*10;//单位1ms
+	  long_Pr_time_delay2 = (int32_t) (Servo.Pn02.AutoTimer2.Data)*10;//单位1ms
+	  AutoDelayTime = (int32_t) (Servo.Pn02.AutoTimer1.Data)*10;//单位1ms
+
+	  spd_rc1.rmp_spd_loop_ps = speed_loop_ps;
+	  spd_rc1.rmp_spd_max = int_speed_max;
+	  pr1.rmp_pos_loop_ps = position_loop_ps;
+	  pr1.rmp_spd_max = int_speed_max;
+	  pr1.rmp_inc_dec_time = Servo.Pn02.SpdDecTime.Data;
+	  pr1.init(&pr1);
+
+	  long_Pr_pos_sum_ref1 = (((uint32_t)Servo.Pn04.PosCircle1.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset1.Data);
+	  long_Pr_pos_sum_ref2 = (((uint32_t)Servo.Pn04.PosCircle2.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset2.Data);
+	  long_Pr_pos_sum_ref3 = (((uint32_t)Servo.Pn04.PosCircle3.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset3.Data);
+	  long_Pr_pos_sum_ref4 = (((uint32_t)Servo.Pn04.PosCircle4.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset4.Data);
+	  long_Pr_pos_sum_ref5 = (((uint32_t)Servo.Pn04.PosCircle5.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset5.Data);
+	  long_Pr_pos_sum_ref6 = (((uint32_t)Servo.Pn04.PosCircle6.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset6.Data);
+	  long_Pr_pos_sum_ref7 = (((uint32_t)Servo.Pn04.PosCircle7.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset7.Data);
+	  long_Pr_pos_sum_ref8 = (((uint32_t)Servo.Pn04.PosCircle8.Data * 10000) + (uint16_t)Servo.Pn04.PosOffset8.Data);
+
+	  Io_Input0_State = (Servo.Pn01.DI1Ctrl.Data % 1000) % 100;
+	  Io_Input1_State = (Servo.Pn01.DI2Ctrl.Data % 1000) % 100;
+	  Io_Input2_State = (Servo.Pn01.DI3Ctrl.Data % 1000) % 100;
+	  Io_Input3_State = (Servo.Pn01.DI4Ctrl.Data % 1000) % 100;
+	  Io_Input4_State = (Servo.Pn01.DI5Ctrl.Data % 1000) % 100;
+	  Io_Input5_State = (Servo.Pn01.DI6Ctrl.Data % 1000) % 100;
+	  Io_Input6_State = (Servo.Pn01.DI7Ctrl.Data % 1000) % 100;
+	  Io_Input7_State = (Servo.Pn01.DI8Ctrl.Data % 1000) % 100;
+	  Io_Input8_State = (Servo.Pn01.DI9Ctrl.Data % 1000) % 100;
+
+	  Io_Input0_Dir = (Servo.Pn01.DI1Ctrl.Data / 1000);
+	  Io_Input1_Dir = (Servo.Pn01.DI2Ctrl.Data / 1000);
+	  Io_Input2_Dir = (Servo.Pn01.DI3Ctrl.Data / 1000);
+	  Io_Input3_Dir = (Servo.Pn01.DI4Ctrl.Data / 1000);
+	  Io_Input4_Dir = (Servo.Pn01.DI5Ctrl.Data / 1000);
+	  Io_Input5_Dir = (Servo.Pn01.DI6Ctrl.Data / 1000);
+	  Io_Input6_Dir = (Servo.Pn01.DI7Ctrl.Data / 1000);
+	  Io_Input7_Dir = (Servo.Pn01.DI8Ctrl.Data / 1000);
+	  Io_Input8_Dir = (Servo.Pn01.DI9Ctrl.Data / 1000);
+
+	  Io_Output0_State = (Servo.Pn01.DO1Ctrl.Data % 1000) % 100;
+	  Io_Output1_State = (Servo.Pn01.DO2Ctrl.Data % 1000) % 100;
+	  Io_Output2_State = (Servo.Pn01.DO3Ctrl.Data % 1000) % 100;
+	  Io_Output3_State = (Servo.Pn01.DO4Ctrl.Data % 1000) % 100;
+	  Io_Output4_State = (Servo.Pn01.DO5Ctrl.Data % 1000) % 100;
+	  Io_Output0_Dir = Servo.Pn01.DO1Ctrl.Data / 1000;
+	  Io_Output1_Dir = Servo.Pn01.DO2Ctrl.Data / 1000;
+	  Io_Output2_Dir = Servo.Pn01.DO3Ctrl.Data / 1000;
+	  Io_Output3_Dir = Servo.Pn01.DO4Ctrl.Data / 1000;
+	  Io_Output4_Dir = Servo.Pn01.DO5Ctrl.Data / 1000;
+
+	  DI0_Force = (Servo.Pn01.DI1Ctrl.Data%1000)/100;
+	  DI1_Force = (Servo.Pn01.DI2Ctrl.Data%1000)/100;
+	  DI2_Force = (Servo.Pn01.DI3Ctrl.Data%1000)/100;
+	  DI3_Force = (Servo.Pn01.DI4Ctrl.Data%1000)/100;
+	  DI4_Force = (Servo.Pn01.DI5Ctrl.Data%1000)/100;
+	  DI5_Force = (Servo.Pn01.DI6Ctrl.Data%1000)/100;
+	  DI6_Force = (Servo.Pn01.DI7Ctrl.Data%1000)/100;
+	  DI7_Force = (Servo.Pn01.DI8Ctrl.Data%1000)/100;
+	  DI8_Force = (Servo.Pn01.DI9Ctrl.Data%1000)/100;
+
+	  DO0_Force = (Servo.Pn01.DO1Ctrl.Data%1000)/100;
+	  DO1_Force = (Servo.Pn01.DO2Ctrl.Data%1000)/100;
+	  DO2_Force = (Servo.Pn01.DO3Ctrl.Data%1000)/100;
+	  DO3_Force = (Servo.Pn01.DO4Ctrl.Data%1000)/100;
+	  DO4_Force = (Servo.Pn01.DO5Ctrl.Data%1000)/100;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+}
+void motor_para_real_cala(void)
+{
+    pid1_iq.motor_speed = speed1.speed_frq;
+    pid1_id.motor_speed = speed1.speed_frq;
+    pid1_spd.motor_speed = speed1.speed_frq;
+    if(speed1.speed_frq >= -_iqSpdBackFilterChg1 || speed1.speed_frq <= _iqSpdBackFilterChg1)
+    {
+      speed1.K2 = _iqSpdBackFilter1;
+      speed1.K3 = _IQ24(1) - speed1.K2;
+    }
+    else
+    {
+      speed1.K2 = _iqSpdBackFilter2;
+      speed1.K3 = _IQ24(1)  - speed1.K2;
+    }
+    FactorUpdate();
+}
+void MS_DispMotorSpeed(void)
+{
+	  if(spd_sum_cnt>=2048)
+	  {
+		   Fn.MotorSpd= Fn.MotorSpdSum>>11;
+           if(Fn.MotorSpd >= -1 && Fn.MotorSpd <= 1)
+		   {
+			  Fn.MotorSpd = 0;
+		   }
+		   else
+		   {
+			  if(Fn.MotorSpd >= 10)
+			  {
+			     Fn.MotorSpd = Fn.MotorSpd + 1;
+			  }
+			  else if(Fn.MotorSpd <= -10)
+			  {
+				  Fn.MotorSpd = Fn.MotorSpd + 1;
+			  }
+
+		   }
+
+		   spd_sum_cnt= 0;
+		   Fn.MotorSpdSum= 0;
+	  }
+	  else
+	  {
+		   Fn.MotorSpdSum= Fn.MotorSpdSum + speed_spd;//speed1.speed_rpm  speed_spd
+		   spd_sum_cnt++;
+	  }
+	  if(cmd_hz.cmd_sum_cnt >= 100)
+	  {
+		   cmd_hz.cmd_new =  ExPulseTimerCnt;
+		   if(ExPulseTimerDir == 1)
+		   {
+				LED_DIR_DISP = 1;
+		   }
+		   else
+		   {
+				LED_DIR_DISP = 0;
+		   }
+		   if(cmd_hz.cmd_new != cmd_hz.cmd_old)
+		   {
+				LED_PULSE_DISP = 1;
+		   }
+		   else
+		   {
+		  		LED_PULSE_DISP = 0;
+		   }
+		   cmd_hz.calc(&cmd_hz);
+		   cmd_hz.cmd_ref_hz = cmd_hz.cmd_frq;
+		   PulseSpeedRef = cmd_hz.cmd_frq * 3 / 5;//转化为速度
+		   cmd_hz.cmd_sum_cnt = 1;
+
+	  }
+	  else
+	  {
+		   cmd_hz.cmd_sum_cnt++;
+      }
+}
+void MS_CurrentOverCheck(void)
+{
+	  static float cur_iq;
+	  static float cur_id;
+	  static float current_actual;//峰值电流
+
+
+	  if(HclSwitch.Hcl_EnableSw == 0)
+	  {
+		cur_iq = ((park1.Qs * Servo.Pn01.CurSampleMax.Data)>>15) * 0.01/1.414;//Q轴电流有效值
+		cur_id = ((park1.Ds * Servo.Pn01.CurSampleMax.Data)>>15) * 0.01/1.414;//D轴电流有效值
+		csi_sqrt_f32((cur_iq*cur_iq + cur_id*cur_id),&current_actual);
+		int_I_eqv =  current_actual*100;//单位是0.01A
+	  }
+	  else
+	  {
+		cur_iq = (((s16)(*HCL[0]).NODD_IQ.bit.VAL * Servo.Pn01.CurSampleMax.Data)>>15) * 0.01/1.414;//Q轴电流有效值
+		cur_id = (((s16)(*HCL[0]).NODD_ID.bit.VAL * Servo.Pn01.CurSampleMax.Data)>>15) * 0.01/1.414;//D轴电流有效值
+		csi_sqrt_f32((cur_iq*cur_iq + cur_id*cur_id),&current_actual);
+		int_I_eqv =  current_actual*100;//单位是0.01A;
+	  }
+		if(I_sum_cnt >= 512)
+		{
+			  long_I_eqv_dsp = long_I_eqv_sum>>9;
+			  Fn.CurAlarmRef = long_I_eqv_dsp;
+			  Fn.TorqueFdb = ((int32_t)Fn.CurAlarmRef*(int32_t)(Servo.Pn02.Torquek.Data) / 1000);
+			  if(Fn.CurAlarmRef > int_I_alm_gate || Fn.CurAlarmRef < -int_I_alm_gate)
+			  {
+				    i_error_cnt++;
+			  }
+			  else
+			  {
+				    i_error_cnt=0;
+			  }
+			  if(i_error_cnt>=Servo.Pn01.CurOverDelay.Data)
+			  {
+				    Err.CurOverFlag = 1;
+					Err.ServoAlarmFlag = 1;
+			  }
+			  if(Fn.CurAlarmRef > int_I_alm_gate2 || Fn.CurAlarmRef < -int_I_alm_gate2)
+			  {
+				    i_error_cnt2++;
+			  }
+			  else
+			  {
+				    i_error_cnt2=0;
+			  }
+			  if(i_error_cnt2>=Servo.Pn01.LoadOverTime.Data)
+			  {
+				    Err.LoadOverFlag = 1;
+				    Err.ServoAlarmFlag = 1;
+			  }
+			  I_sum_cnt = 0;
+			  long_I_eqv_sum = 0;
+		}
+		else
+		{
+			  I_sum_cnt++;
+			  long_I_eqv_sum += int_I_eqv;
+		}
+}
+void MotorUvwErrChk(s16 ServoCmdRef)
+{
+   s32 ServoCmdRef_tmp;
+  /*****************************????**********************************/
+   ServoCmdRef_tmp = ServoCmdRef;
+	 if(MotorRunFlag == 1 && Servo.Pn01.UVWerrorIgore.Data == 0)
+	 {
+			if(ServoCmdRef_tmp != 0)
+			{
+					Err.MotorUVWErrorEn1 = 1;
+			}
+			if(Err.MotorUVWErrorEn1 == 0)
+			{
+					if(Err.MotorUVWErrorCnt <= 30000)
+					{
+							 Err.MotorUVWErrorCnt++;
+							 if(ServoCmdRef_tmp == 0)
+							 {
+										if((int_I_eqv > (Servo.Pn01.RatedCurrent.Data*Servo.Pn01.RatedCurrent.Unit) || int_I_eqv < -(Servo.Pn01.RatedCurrent.Data*Servo.Pn01.RatedCurrent.Unit))
+										&&(speed_spd > 50 || speed_spd < -50))
+										{
+												Err.MotorUVWErrorFlag = 1;
+												Err.ServoAlarmFlag = 1;
+										}
+							 }
+					}
+			}
+			if(ServoCmdRef_tmp != 0)
+			{
+					Err.MotorUVWErrorEn2 = 1;
+			}
+			if(Err.MotorUVWErrorEn2 == 0)
+			{
+					Err.MotorUVWErrorCnt2++;
+					if(speed_spd > 300 || speed_spd < -300)
+					{
+						 Err.MotorUVWErrorFlag = 1;
+						 Err.ServoAlarmFlag = 1;
+					}
+			}
+			if(Err.MotorUVWErrorEn3 == 0)
+			{
+					if(ServoCmdRef_tmp != 0)
+					{
+						 if(int_I_eqv >= Err.MotorRunMaxCur || int_I_eqv <= -Err.MotorRunMaxCur)
+						 {
+								Err.MotorUVWErrorCnt3++;
+						 }
+						 else
+						 {
+								Err.MotorUVWErrorCnt3 = 0;
+						 }
+						 if(Err.MotorUVWErrorCnt3 >= 2000)
+						 {
+								Err.CurOverFlag = 1;
+								Err.MotorUVWErrorEn3 = 1;
+						 }
+				  }
+		  }
+	 }
+}
+int16_t sttt = 0;
+u32 key_data;
+void MS_ParaInit(void)
+{
+	  int16_t n;
+
+	  PARAMETER_DATA *PARA_ptr = (void*) &Servo.Pn00.SoftVerion;
+	  ParaTotal = (int16_t)Pn_NUM;
+	  Par0Num = (int16_t)Pn00_NUM;
+	  Par1Num = (int16_t)Pn01_NUM;
+	  Par2Num = (int16_t)Pn02_NUM;
+	  Par3Num = (int16_t)Pn03_NUM;
+	  Par4Num = (int16_t)Pn04_NUM;
+
+	  LdFromParaIint();
+
+	  gpio_set_val(ioPWMcsOut,GPIO_LEVEL_HIGH);//PWMCS OFF
+//	  gpio_set_val(ioReLayOut,GPIO_LEVEL_LOW);//Relay On
+
+	  IoDo.SRDY = 1;             //准备好
+	  if(Err.ServoAlarmFlag ==0) //报警
+	  {
+		 IoDo.ALARM = 0;
+	  }
+	  else
+	  {
+		 IoDo.ALARM = 1;
+	  }
+	  IoDo.TSPD = 0;	           //扭矩达到
+	  IoDo.BRKR = 0;               //关抱闸
+
+	  (PARA_ptr + Pn00_NUM + 0)->Data = read_e2prom(eeprom_dev_num,0);
+	  (PARA_ptr + Pn00_NUM + 0)->Data = read_e2prom(eeprom_dev_num,0);
+
+	  P1_05 = read_e2prom(eeprom_dev_num,5*2+2);
+	  P1_06 = read_e2prom(eeprom_dev_num,6*2+2);
+	 if(P1_05 <= 0)
+	 {
+		 ParExceDefFlag = 1;
+		 Err.MotorTypeErrFlag = 1;
+	 }
+	 else if(P1_06 <= 0)
+	 {
+		 ParExceDefFlag = 1;
+		 Servo.Pn01.MotorType.Data = P1_05;
+	 }
+
+	 if(ParExceDefFlag == 0)
+	 {
+		 for(n=0;n<(ParaTotal-Pn00_NUM);n++)
+		 {
+			 (PARA_ptr + Pn00_NUM +n)->Data = read_e2prom(eeprom_dev_num,2*n+2);
+		 }
+		 if(Servo.Pn01.ContrlMode.Data < Servo.Pn01.ContrlMode.Min ||
+				 Servo.Pn01.ContrlMode.Data > Servo.Pn01.ContrlMode.Max ||
+					   Servo.Pn01.N1.Data < Servo.Pn01.N1.Min         ||
+					   Servo.Pn01.N1.Data > Servo.Pn01.N1.Max         ||
+					   Servo.Pn01.N2.Data < Servo.Pn01.N2.Min         ||
+					   Servo.Pn01.N2.Data > Servo.Pn01.N2.Max         ||
+					   Servo.Pn01.M1.Data < Servo.Pn01.M1.Min         ||
+					   Servo.Pn01.M1.Data > Servo.Pn01.M1.Max         ||
+					Servo.Pn02.SpdKp.Data < Servo.Pn02.SpdKp.Min      ||
+					Servo.Pn02.SpdKp.Data > Servo.Pn02.SpdKp.Max      ||
+					Servo.Pn02.SpdKi.Data < Servo.Pn02.SpdKi.Min      ||
+					Servo.Pn02.SpdKi.Data > Servo.Pn02.SpdKi.Max      ||
+					Servo.Pn02.PosKp.Data < Servo.Pn02.PosKp.Min      ||
+					Servo.Pn02.PosKp.Data > Servo.Pn02.PosKp.Max      ||
+					Servo.Pn02.CurKp.Data < Servo.Pn02.CurKp.Min      ||
+					Servo.Pn02.CurKp.Data > Servo.Pn02.CurKp.Max      ||
+					Servo.Pn02.CurKi.Data < Servo.Pn02.CurKi.Min      ||
+					Servo.Pn02.CurKi.Data > Servo.Pn02.CurKi.Max)//检测P1-00,P1-06,P1-07,P1-10,P2-00
+																 //P2-01,P2-02,P2-13,P2-14参数有没有跳变
+		 {
+			 Err.ServoAlarmFlag = 1;
+			 Err.E2promReadErrFlag = 1;
+		 }
+		 encoder1.AbsaAxisSaveH = (uint16_t)(read_e2prom(eeprom_dev_num,2*(230 + 6 + 1)));
+		 encoder1.AbsaAxisSaveL = (uint16_t)(read_e2prom(eeprom_dev_num,2*(230 + 7 + 1)));
+		 encoder1.AbsaAxisSave =(int32_t)((((uint32_t)encoder1.AbsaAxisSaveH) << 16) | (uint16_t)encoder1.AbsaAxisSaveL);
+
+		 if(Servo.Pn01.RunTimeLimit.Data <= 0)//判断是否第一次恢复参数
+		 {
+			  ParSaveEnable = 1;
+		 }
+		 else
+		 {
+			  ParSaveEnable = 0;
+		 }
+	  }
+
+      Servo.Pn00.SysReset.Data = 0;
+      HclEnableSw_new = Servo.Pn01.HclEnableSw2.Data;
+      HclEnableSw_old = HclEnableSw_new;
+      IsrFrequency_new = Servo.Pn02.IsrFrequency.Data;
+      IsrFrequency_old = IsrFrequency_new;
+      AbsaTypeCmd_new = Servo.Pn02.AbsaTypeCmd.Data;
+      AbsaTypeCmd_old = AbsaTypeCmd_new;
+
+      MotorType_new = Servo.Pn01.MotorType.Data;
+      MotorType_old = MotorType_new;
+      if(Servo.Pn04.DeadTime.Data <= 0)//防止参数读写错误，导致死区时间失效
+      {
+    	  Servo.Pn04.DeadTime.Data = 360;//死区时间 = 360/240 = 1.5us
+      }
+
+      if(Servo.Pn03.CommSlaverNum.Data <= 0) //force RS485 config
+      {
+	     Servo.Pn03.CommSlaverNum.Data = 1;
+		 Servo.Pn03.CommBaudRate.Data = 3;
+      }
+	  if(Servo.Pn01.DispItem.Data >23)
+	  {
+		 Servo.Pn01.DispItem.Data = 7;
+	  }
+	  if(Servo.Pn02.SYNCPeriodRatio.Data <= 0)//防止通讯周期和位置环周期比值为0
+	  {
+		  Servo.Pn02.SYNCPeriodRatio.Data = 1;
+	  }
+      if(Servo.Pn02.HCLPeriodRatio.Data <= 0)//防止载波周期和硬件电流环周期比值为0
+      {
+    	  Servo.Pn02.HCLPeriodRatio.Data = 1;
+      }
+      STR_FUNC_Gvar.System.ZeroOffset = Servo.Pn02.ZeroOffset.Data;
+
+	  AbsaCmdTmp = Servo.Pn02.AbsaCtrlCmd.Data;
+
+	  pid1_spd.Kd_reg3 = _IQ24(0);
+	  pid1_spd.Kc_reg3 = _IQ24(0.5);
+	  pid1_spd.pid_out_max = _IQ24(1);
+	  pid1_spd.pid_out_min = _IQ24(-1);
+	  pid1_spd.pid_type = 2;
+	  pid1_spd.pid_p_sel = 0;
+
+	  pid1_pos.Kp_reg3 = _IQ24(0.3);
+	  pid1_pos.Ki_reg3 = _IQ24(0);
+	  pid1_pos.Kd_reg3 = _IQ24(0);
+	  pid1_pos.Kc_reg3 = _IQ24(0.0);
+	  pid1_pos.pid_out_max = _IQ24(1);
+	  pid1_pos.pid_out_min = _IQ24(-1);
+	  pid1_pos.pid_type = 3;
+
+
+	  pid1_fdb_bef.Ki_reg3 = _IQ24(0);
+	  pid1_fdb_bef.Kd_reg3 = _IQ24(0);
+	  pid1_fdb_bef.Kc_reg3 = _IQ24(0.0);
+	  pid1_fdb_bef.pid_out_max = _IQ24(1);
+	  pid1_fdb_bef.pid_out_min = _IQ24(-1);
+	  pid1_fdb_bef.pid_type = 4;
+
+
+	  spd_rc1.rmp_spd_loop_ps = speed_loop_ps;
+	  spd_rc1.rmp_spd_max = 3000;
+	  spd_rc1.target_value = 0;
+	  spd_rc1.init(&spd_rc1);
+   //**************************************
+	  //软件参数配置
+	  //**************************************
+	  //速度PI参数初始化
+	  pi_spd1.Kp=_IQ(0.1);
+	  pi_spd1.Ki=_IQ(0.001);
+	  pi_spd1.Umax =_IQ(1.0);
+	  pi_spd1.Umin =_IQ(-1.0);
+
+	  //ID电流PI参数初始化
+	  pi_id1.Kp=_IQ(0.2);
+	  pi_id1.Ki=_IQ(0.03);
+	  pi_id1.Umax =_IQ(0.125);
+	  pi_id1.Umin =_IQ(-0.125);
+
+	  //IQ电流参数初始化
+	  pi_iq1.Kp=_IQ(0.2);
+	  pi_iq1.Ki=_IQ(0.03);
+	  pi_iq1.Umax =_IQ(0.3);
+	  pi_iq1.Umin =_IQ(-0.3);
+
+	  pr1.rmp_pos_loop_ps = position_loop_ps;
+	  pr1.rmp_spd_max = int_speed_max;
+	  pr1.rmp_inc_dec_time = Servo.Pn02.SpdDecTime.Data;
+	  pr1.init(&pr1);
+	  //ABS参数初始化
+	  abs_param1.AbsMax = EncodeLine;	//17bit
+	  abs_param1.PolePairs = Servo.Pn02.Pairs.Data;	//5 pole pairs
+	  abs_param1.ElectMax = abs_param1.AbsMax/abs_param1.PolePairs;
+
+
+
+	  //speed参数初始化
+	  //abs_speed1.RpmFactor = 60 * SPEED_FREQUENCY * 1000  / abs_param1.PolePairs  ;
+	  abs_speed1.RpmFactor = 60 * 10 * 1000  / Servo.Pn02.Pairs.Data  ;
+	  motor_para_init( );
+	  encoder_line_sel(Servo.Pn02.AbsaTypeCmd.Data);//根据P2-58设置的值选择对应的编码器分辨率
+	  motor_para_cala( );
+	  rg1.step_angle_max = _IQ(BASE_FREQ*PWM_T);
+
+
+//	  STR_XiLnIntplt.LineInterplt_pos_v = 916260;//1个脉冲对应的速度  k=（1/8388608）/(100 * 10^-6 /60)=0.715 RPM ,1/k * 2^16 = 916260
+	  //8388608表示为23位绝对值编码器，电机速度 1000 RPM ,对应的脉冲速度 为 1000 * 916260
+	  STR_XiLnIntplt.LineInterplt_pos_v = ((s64)EncodeLine * 65536) / ((float)60/PWM_T);//1个脉冲对应的速度  k=（1/EncodeLine）/(100 * 10^-6 /60)=4.58 RPM ,1/k * 2^16 = 14317
+
+//	  STR_XiLnIntplt.LineInterplt_pos_v = 14137;//1个脉冲对应的速度  k=（1/131072）/(100 * 10^-6 /60)=4.58 RPM ,1/k * 2^16 = 14317
+	  //131072表示为17位绝对值编码器，电机速度 1000 RPM ,对应的脉冲速度 为 1000 * 14317
+
+//	  STR_XiLnIntplt.LineInterplt_pos_v = 916260;//1个脉冲对应的速度  k=（1/8388608）/(100 * 10^-6 /60)=0.715 RPM ,1/k * 2^16 = 916260
+	  //8388608表示为23位绝对值编码器，电机速度 1000 RPM ,对应的脉冲速度 为 1000 * 916260
+	  PosRef =  (s64)Servo.Pn04.PosOffset4.Data + (s64)Servo.Pn04.PosCircle4.Data * EncodeLine;
+}
+void motor_para_init(void)
+{
+	 //SVPWM参数初始化
+	svpwm1.TIMECONST = _IQ(1.0);
+	svpwm1.PWMPRD = STR_FUNC_Gvar.System.EpwmInvPeriod / 2;
+	svpwm1.MINDUTY	 = 5;
+	svpwm1.MAXDUTY	 = svpwm1.PWMPRD - svpwm1.MINDUTY;
+	hcl_pid_clr(0);//清除电流环PID
+
+	pi_reset(&pi_id1);
+	pi_reset(&pi_iq1);
+	park_de_fil1.init(&park_de_fil1);
+	park_qe_fil1.init(&park_qe_fil1);
+	spd_fil2.init(&spd_fil2);
+	spd_fil3.init(&spd_fil2);
+	pos_bef_fil1.init(&pos_bef_fil1);
+	pid1_id.init(&pid1_id);
+	pid1_iq.init(&pid1_iq);
+	pid1_spd.init(&pid1_spd);
+	pid1_pos.init(&pid1_pos);
+	pid1_fdb_bef.init(&pid1_fdb_bef);
+
+	contrl.init(&contrl);
+	pos.init(&pos);
+	spd_rc1.init(&spd_rc1);
+
+}
+
+void LdFromParaIint(void)
+{
+	int16_t i;
+	int32_t *DI_ptr = &IoDi.DI_SON;
+	int32_t *ERR_ptr = &Err.SpeedHighFlag;
+	PARAMETER_DATA *PARA_ptr_init = (void *)&Servo.Pn00.SoftVerion;
+	int32_t *Fn_ptr = &Fn.PosFrqLow;
+	uint16_t *Comm_ptr = &ServoCommData.PositionDatah;
+	for(i=0; i<ParaTotal; i++)
+	{
+		(PARA_ptr_init+i)->Data = ParaIint[i].Data;
+	    (PARA_ptr_init+i)->Max  = ParaIint[i].Max;
+	    (PARA_ptr_init+i)->Min  = ParaIint[i].Min;
+	    (PARA_ptr_init+i)->Unit = ParaIint[i].Unit;
+	    (PARA_ptr_init+i)->attri.all = ParaIint[i].attri.all;
+	}
+
+	memset(ERR_ptr,0,sizeof(SERVO_ERR)/4);
+	memset(DI_ptr,0,sizeof(SERVO_DI)/4);
+	memset(Comm_ptr,0,sizeof(SERVO_COMM)/2);
+	memset(Fn_ptr,0,sizeof(SERVO_FN)/4);
+
+	IoDi.DI_SPD_CCW = 2;
+	IoDi.DI_SPD_CW = 2;
+	IoDi.DI_PHOLD = 1;
+	IoDi.DI_INH = 2;
+
+}
+void MS_DcbusClac(void)
+{
+	 if(VdcCnt >= 1024)
+	 {
+		 VdcAvg = VdcSum >> 10;
+//		 U=(VdcAvg/16384)*3.3V/(24K/4024K)
+		 Fn.VdcInputVol = (int32_t)((VdcAvg/16384.0)*555);
+		 VdcCnt = 0;
+		 VdcSum = 0;
+	 }
+	 else
+	 {
+		 VdcSum = VdcSum + ilg2_vdc1.Vdc_meas;
+		 VdcCnt++;
+	 }
+}
+void MS_Irq_Time_Clac(void)
+{
+	 if(IrqTimeCnt >= 2048)
+	 {
+		 IrqTimeAvg = ((int32_t)(IrqTimeSum * 8.33) / 10) >> 11; //GPT时间基准是GPT_NS_8.33
+		 // ((int32_t)(IrqTimeSum * 8.33) / 10) 显示单位为us，留2个小数点，所以除10
+		 IrqTimeCnt = 0;
+		 IrqTimeSum = 0;
+	 }
+	 else
+	 {
+		 IrqTimeSum = IrqTimeSum + run_irq_time;
+		 IrqTimeCnt++;
+	 }
+}

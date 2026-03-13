@@ -1,0 +1,392 @@
+<?xml version="1.0"?>
+<!-- 被2013 sp1 () 使用XMLSpy v编辑的 (http://www.altova.com) by -->
+<SscToolConfiguration SSCVersion="5.13" VendorID="#xF59" VendorName="Artinchip" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="SscToolConfiguration.xsd">
+	<Configurations>
+		<Configuration Name="AIC ECAT EOE Sample" Version="1.0.0.0" Info="AIC EOE device setting.">
+			<!-- SlaveInformation-->
+			<Setting CodeDefine="VENDOR_ID" Value="0x00000F59"/>
+			<Setting CodeDefine="VENDOR_NAME" Value="Artinchip"/>
+			<Setting CodeDefine="GROUP_NAME" Value="AIC_GROUP"/>
+			<Setting CodeDefine="REVISION_NUMBER" Value="0x100"/>
+			<Setting CodeDefine="PRODUCT_CODE" Value="0x800"/>
+			<Setting CodeDefine="SERIAL_NUMBER" Value="0x0"/>
+			<Setting CodeDefine="DEVICE_NAME" Value="AIC_EOE"/>
+			<Setting CodeDefine="DEVICE_HW_VERSION" Value="1.0"/>
+			<Setting CodeDefine="DEVICE_SW_VERSION" Value="1.0"/>
+			<!-- Generic-->
+			<Setting CodeDefine="SYSTEM_HEADER_FILE" Value="#include &lt;all_inc.h&gt;">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="EXPLICIT_DEVICE_ID" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESC_SM_WD_SUPPORTED" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="STATIC_OBJECT_DIC" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESC_EEPROM_ACCESS_SUPPORT" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<!-- Hardware-->
+			<Setting CodeDefine="EL9800_HW" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MCI_HW" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="FC1100_HW" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="HW_ACCESS_FILE" Value="#include &quot;aic_ecat_hw.h&quot;">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="CONTROLLER_16BIT" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="CONTROLLER_32BIT" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MEMORY_UNIT_16BIT" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="_PIC18" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="_PIC24" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESC_16BIT_ACCESS" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESC_32BIT_ACCESS" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBX_16BIT_ACCESS" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="BIG_ENDIAN_16BIT" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="BIG_ENDIAN_FORMAT" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="EXT_DEBUGER_INTERFACE" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="UC_SET_ECAT_LED" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESC_SUPPORT_ECAT_LED" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESC_EEPROM_EMULATION" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="CREATE_EEPROM_CONTENT" Value="0"/>
+			<Setting CodeDefine="ESC_EEPROM_SIZE" Value="0x800"/>
+			<Setting CodeDefine="EEPROM_WRITE_SIZE" Value="0x2">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESC_CONFIG_DATA" Value="800C046600000100">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MAKE_PTR_TO_ESC" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<!-- EtherCAT State Machine -->
+			<Setting CodeDefine="BOOTSTRAPMODE_SUPPORTED" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OP_PD_REQUIRED" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="PREOPTIMEOUT" Value="0x7D0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="SAFEOP2OPTIMEOUT" Value="0x2328">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="CHECK_SM_PARAM_ALIGNMENT" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<!-- Synchronization -->
+			<Setting CodeDefine="AL_EVENT_ENABLED" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="DC_SUPPORTED" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ECAT_TIMER_INT" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="INTERRUPTS_SUPPORTED" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MIN_PD_CYCLE_TIME" Value="0x7A120">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MAX_PD_CYCLE_TIME" Value="0xC3500000">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="PD_OUTPUT_DELAY_TIME" Value="0x0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="PD_OUTPUT_CALC_AND_COPY_TIME" Value="0x0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="PD_INPUT_CALC_AND_COPY_TIME" Value="0x0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="PD_INPUT_DELAY_TIME" Value="0x0">
+				<Flags Visible="True"/>
+			</Setting>
+			<!-- Application -->
+			<Setting CodeDefine="TEST_APPLICATION_REDUCED_MEMORY" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="CiA402_SAMPLE_APPLICATION" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="SAMPLE_APPLICATION" Value="0"/>
+			<Setting CodeDefine="BOOTLOADER_SAMPLE" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="SAMPLE_APPLICATION_INTERFACE" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="APPLICATION_FILE" Value=""/>
+			<Setting CodeDefine="USE_DEFAULT_MAIN" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="EL9800_APPLICATION" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<!-- Mailbox -->
+			<Setting CodeDefine="MAILBOX_QUEUE" Value="1"/>
+			<Setting CodeDefine="AOE_SUPPORTED" Value="0"/>
+			<Setting CodeDefine="COE_SUPPORTED" Value="1"/>
+			<Setting CodeDefine="COMPLETE_ACCESS_SUPPORTED" Value="1"/>
+			<Setting CodeDefine="SEGMENTED_SDO_SUPPORTED" Value="1"/>
+			<Setting CodeDefine="SDO_RES_INTERFACE" Value="1"/>
+			<Setting CodeDefine="USE_SINGLE_PDO_MAPPING_ENTRY_DESCR" Value="0"/>
+			<Setting CodeDefine="BACKUP_PARAMETER_SUPPORTED" Value="0"/>
+			<Setting CodeDefine="STORE_BACKUP_PARAMETER_IMMEDIATELY" Value="0"/>
+			<Setting CodeDefine="DIAGNOSIS_SUPPORTED" Value="0"/>
+			<Setting CodeDefine="MAX_DIAG_MSG" Value="0x14"/>
+			<Setting CodeDefine="MAX_EMERGENCIES" Value="1"/>
+			<Setting CodeDefine="VOE_SUPPORTED" Value="0"/>
+			<Setting CodeDefine="SOE_SUPPORTED" Value="0"/>
+			<Setting CodeDefine="EOE_SUPPORTED" Value="1"/>
+			<Setting CodeDefine="STATIC_ETHERNET_BUFFER" Value="0"/>
+			<Setting CodeDefine="FOE_SUPPORTED" Value="0"/>
+			<!-- Compiler -->
+			<Setting CodeDefine="FALSE" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="TRUE" Value="1">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="BOOL" Value="uint8_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="UINT8" Value="uint8_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="UINT16" Value="uint16_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="UINT32" Value="uint32_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="UINT64" Value="uint64_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="USHORT" Value="uint16_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="INT8" Value="int8_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="INT16" Value="int16_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="INT32" Value="int32_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="INT64" Value="int64_t">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="CHAR" Value="char">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="UCHAR" Value="unsigned char">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="REAL32" Value="float">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="REAL64" Value="long double">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="SIZEOF(x)" Value="sizeof(x)">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="HUGE" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="HMEMSET" Value="memset">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="HMEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="HMEMCMP" Value="memcmp">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESCMEM" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESCMEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESCMEMSET" Value="memset">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ESCMBXMEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBXMEM" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBXMEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBXMEMCMP" Value="memcmp">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBXMEMSET" Value="memset">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBXSTRLEN" Value="strlen">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBXSTRCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJCONST" Value="const">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="VARCONST" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="VARVOLATILE" Value="volatile">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJMEM" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJTOMBXMEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJTOMBXSTRCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJMEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJSTRLEN" Value="strlen">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJSTRCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MAKE_HUGE_PTR" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="EMCYMEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="EMCYMEMSET" Value="memset">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="EMCYMEM" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MEMCPY" Value="memcpy">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="ALLOCMEM(size)" Value="aic_tlsf_malloc(0,size)">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="FREEMEM(pointer)" Value="aic_tlsf_free(0,pointer)">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="VARMEMSET" Value="memset">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="VARMEM" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MEM_ADDR" Value="UINT32">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="GET_MEM_SIZE(ByteSize)" Value="(((ByteSize)+3) >> 2)">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="APPL_AllocMailboxBuffer(size)" Value="aic_tlsf_malloc(0,size)">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="APPL_FreeMailboxBuffer(pointer)" Value="aic_tlsf_free(0,pointer)">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="STRUCT_PACKED_START" Value="PACKED_ATTR">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="STRUCT_PACKED_END" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="FILE_PACKED_START" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="FILE_PACKED_END" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBX_STRUCT_PACKED_START" Value="PACKED_ATTR">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBX_STRUCT_PACKED_END" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBX_FILE_PACKED_START" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="MBX_FILE_PACKED_END" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJ_STRUCT_PACKED_START" Value="PACKED_ATTR">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJ_STRUCT_PACKED_END" Value="">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJ_DWORD_ALIGN" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<Setting CodeDefine="OBJ_WORD_ALIGN" Value="0">
+				<Flags Visible="True"/>
+			</Setting>
+			<ESI Path="/EtherCATInfo/Descriptions/Devices/Device/Info">
+				<Value>
+					<EtherCATController>
+						<DpramSize>8192</DpramSize>
+						<SmCount>8</SmCount>
+						<FmmuCount>8</FmmuCount>
+					</EtherCATController>
+				</Value>
+				<!--ESC Parameter-->
+			</ESI>
+		</Configuration>
+	</Configurations>
+</SscToolConfiguration>

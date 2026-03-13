@@ -1,0 +1,480 @@
+/*
+ * user_io.c
+ *
+ *  Created on: 2023年8月14日
+ *      Author: wenxing.ma
+ */
+#include "all_inc.h"
+#include "M680x_it.h"
+int32_t   IoCheckDelay = 0;
+
+int16_t   DI_CLR_NEW = 0;
+int16_t   DI_CLR_OLD = 0;
+int16_t   DI_ALRS_NEW = 0;
+int16_t   DI_ALRS_OLD = 0;
+int16_t   DI_PTRG_New = 0;
+int16_t   DI_PTRG_Old = 0;
+int16_t   DI_SHOME_New=0;
+int16_t   DI_SHOME_Old=0;
+int16_t   Comm_SHOME_New = 0;
+int16_t   Comm_SHOME_Old = 0;
+int16_t   DI_POS1_New = 0;
+int16_t   DI_POS1_Old = 0;
+int16_t   DI_POS2_New = 0;
+int16_t   DI_POS2_Old = 0;
+int16_t   DI_POS2_Cnt = 0;
+int16_t   DI_EMC_New = 0;
+int16_t   DI_EMC_Old = 0;
+int16_t   DI_EMC_Flag = 0;
+int16_t   ioPrOutputfalg = 0;
+
+int16_t   DI_SHOME_Enable = 0;
+int16_t   DI_SHOME_Finish = 0;
+
+int16_t   DI_MDC_Enable = 0;
+int16_t   DI_MDC_New = 0;
+int16_t   DI_MDC_Old = 0;
+int16_t   DI_ORG1_Old = 0;
+int16_t   DI_ORG1_New = 0;
+int16_t   DI_ORG1_Flag = 0;
+int32_t   DO_TSPD_Cnt=0;
+
+int16_t   DI_SetAxisNew = 0;
+int16_t   DI_SetAxisOld = 0;
+int16_t   DI_PAUTO_New = 0;
+int16_t   DI_PAUTO_Old = 0;
+int16_t   DI_PAUTO_Delay = 0;
+int16_t   DI_SPD1_New = 0;
+int16_t   DI_SPD1_Old = 0;
+int16_t   DI_SPD2_New = 0;
+int16_t   DI_SPD2_Old = 0;
+int16_t   DI_MDC1=0;
+int16_t   DI_ORG1_Enable = 2;
+
+int16_t   Io_Output_state = 0;
+int16_t   Io_Input_state = 0;
+int16_t   Io_Input0_State = 0;
+int16_t   Io_Input1_State = 0;
+int16_t   Io_Input2_State = 0;
+int16_t   Io_Input3_State = 0;
+int16_t   Io_Input4_State = 0;
+int16_t   Io_Input5_State = 0;
+int16_t   Io_Input6_State = 0;
+int16_t   Io_Input7_State = 0;
+int16_t   Io_Input8_State = 0;
+
+int16_t   Io_Input0_Dir = 0;
+int16_t   Io_Input1_Dir = 0;
+int16_t   Io_Input2_Dir = 0;
+int16_t   Io_Input3_Dir = 0;
+int16_t   Io_Input4_Dir = 0;
+int16_t   Io_Input5_Dir = 0;
+int16_t   Io_Input6_Dir = 0;
+int16_t   Io_Input7_Dir = 0;
+int16_t   Io_Input8_Dir = 0;
+
+int16_t   Io_Output0_State = 0;
+int16_t   Io_Output1_State = 0;
+int16_t   Io_Output2_State = 0;
+int16_t   Io_Output3_State = 0;
+int16_t   Io_Output4_State = 0;
+int16_t   Io_Output5_State = 0;
+
+int16_t   Io_Output0_Dir = 0;
+int16_t   Io_Output1_Dir = 0;
+int16_t   Io_Output2_Dir = 0;
+int16_t   Io_Output3_Dir = 0;
+int16_t   Io_Output4_Dir = 0;
+int16_t   Io_Output5_Dir = 0;
+
+int16_t   PinFilterCnt0 = 0;
+int16_t   PinFilterCnt1 = 0;
+int16_t   PinFilterCnt2 = 0;
+int16_t   PinFilterCnt3 = 0;
+int16_t   PinFilterCnt4 = 0;
+int16_t   PinFilterCnt5 = 0;
+int16_t   PinFilterCnt6 = 0;
+int16_t   PinFilterCnt7 = 0;
+int16_t   PinFilterCnt8 = 0;
+
+int16_t   DI0_Force = 0;
+int16_t   DI1_Force = 0;
+int16_t   DI2_Force = 0;
+int16_t   DI3_Force = 0;
+int16_t   DI4_Force = 0;
+int16_t   DI5_Force = 0;
+int16_t   DI6_Force = 0;
+int16_t   DI7_Force = 0;
+int16_t   DI8_Force = 0;
+
+int16_t   DO0_Force = 0;
+int16_t   DO1_Force = 0;
+int16_t   DO2_Force = 0;
+int16_t   DO3_Force = 0;
+int16_t   DO4_Force = 0;
+int16_t   DO5_Force = 0;
+
+int16_t   DISP_DO1 = 0;  //SRDY
+int16_t   DISP_DO2 = 0;  //ALM
+int16_t   DISP_DO3 = 0;  //ZSPD
+int16_t   DISP_DO4 = 0;  //TSPD
+int16_t   DISP_DO5 = 0;  //BRKR
+int16_t   DISP_DO6 = 0;  //rsv
+int16_t   ioPowerOffInDelay = 0;
+
+void DesignGpio(void)//以下引脚规划参数号与说明书接线图一一对应
+{
+	int32_t *DI_ptr = &IoDi.DI_SON;
+	int32_t *DO_ptr = &IoDo.SRDY;
+	if(DI0_Force == 0)
+	{
+		 if(Io_Input0_Dir == 0)
+		 {
+				if(gpio_get_val(DI1) == GPIO_LEVEL_LOW)
+				{
+					 if(PinFilterCnt0 >= Servo.Pn01.DIFilterTime.Data)
+					 {
+							 *(DI_ptr+Io_Input0_State -1) = 1;
+							 Io_Input_state = Io_Input_state | 0x1;
+					 }
+					 else
+					 {
+							 PinFilterCnt0++;
+					 }
+				}
+				else if(gpio_get_val(DI1) == 1)
+				{
+					 PinFilterCnt0 = 0;
+					 *(DI_ptr+Io_Input0_State -1) = 0;
+					 Io_Input_state = Io_Input_state & 0x7e;
+				}
+		 }
+		 else if(Io_Input0_Dir == 1)
+		 {
+				 if(gpio_get_val(DI1) == 1)
+				{
+					 if(PinFilterCnt0 >= Servo.Pn01.DIFilterTime.Data)
+					 {
+						 *(DI_ptr+Io_Input0_State -1) = 1;
+						 Io_Input_state = Io_Input_state & 0x7e;
+					 }
+					 else
+					 {
+							 PinFilterCnt0++;
+					 }
+				}
+				else if(gpio_get_val(DI1) == 0)
+				{
+					 PinFilterCnt0 = 0;
+					 *(DI_ptr+Io_Input0_State -1) = 0;
+					 Io_Input_state = Io_Input_state | 0x1;
+				}
+		 }
+	}
+	else if(DI0_Force == 1) //DI2强制有效
+	{
+		*(DI_ptr+Io_Input0_State -1) = 1;
+	}
+	if(DI1_Force == 0)
+	{
+		 if(Io_Input1_Dir == 0)
+		 {
+				if(gpio_get_val(DI2) == 0)
+				{
+					 if(PinFilterCnt1 >= Servo.Pn01.DIFilterTime.Data)
+					 {
+							 *(DI_ptr+Io_Input1_State -1) = 1;
+							 Io_Input_state = Io_Input_state | 0x2;
+					 }
+					 else
+					 {
+							 PinFilterCnt1++;
+					 }
+				}
+				else if(gpio_get_val(DI2) == 1)
+				{
+					 PinFilterCnt1 = 0;
+					 *(DI_ptr+Io_Input1_State -1) = 0;
+					 Io_Input_state = Io_Input_state & 0x7d;
+				}
+		 }
+		 else if(Io_Input1_Dir == 1)
+		 {
+				 if(gpio_get_val(DI2) == 1)
+				{
+					 if(PinFilterCnt1 >= Servo.Pn01.DIFilterTime.Data)
+					 {
+						 *(DI_ptr+Io_Input1_State -1) = 1;
+						 Io_Input_state = Io_Input_state & 0x7d;
+					 }
+					 else
+					 {
+							 PinFilterCnt1++;
+					 }
+				}
+				else if(gpio_get_val(DI2) == 0)
+				{
+					 PinFilterCnt1 = 0;
+					 *(DI_ptr+Io_Input1_State -1) = 0;
+					 Io_Input_state = Io_Input_state | 0x2;
+				}
+		 }
+	}
+	else if(DI1_Force == 1) //DI2强制有效
+	{
+		*(DI_ptr+Io_Input1_State -1) = 1;
+	}
+
+	if(DO0_Force == 1)//DO1
+	{
+	  if(Io_Output0_Dir == 0)
+		{
+			gpio_set_val(DO1,GPIO_LEVEL_LOW);
+		}
+		else
+		{
+			gpio_set_val(DO1,GPIO_LEVEL_HIGH);
+		}
+	}
+	else
+	{
+	   if(*(DO_ptr+Io_Output0_State -1) == 1)
+		{
+			 if(Io_Output0_Dir == 0)
+			 {
+					gpio_set_val(DO1,GPIO_LEVEL_HIGH);
+					DISP_DO1 = 1;
+			 }
+			 else
+			 {
+					gpio_set_val(DO1,GPIO_LEVEL_LOW);
+					DISP_DO1 = 0;
+			 }
+		}
+		else
+		{
+			 if(Io_Output0_Dir == 0)
+			 {
+					gpio_set_val(DO1,GPIO_LEVEL_LOW);
+					DISP_DO1 = 0;
+			 }
+			 else
+			 {
+					gpio_set_val(DO1,GPIO_LEVEL_HIGH);
+					DISP_DO1 = 1;
+			 }
+		}
+	}
+
+	if(DO1_Force == 1)
+	{
+		if(Io_Output1_Dir == 0)
+		{
+			 gpio_set_val(DO2,GPIO_LEVEL_LOW);
+		}
+		else
+		{
+			 gpio_set_val(DO2,GPIO_LEVEL_HIGH);
+		}
+	}
+	else
+	{
+		if(*(DO_ptr+Io_Output1_State -1) == 1)
+		{
+			 if(Io_Output1_Dir == 0)
+			 {
+				 gpio_set_val(DO2,GPIO_LEVEL_HIGH);
+				 DISP_DO2 = 1;
+			 }
+			 else
+			 {
+				 gpio_set_val(DO2,GPIO_LEVEL_LOW);
+				 DISP_DO2 = 0;
+			 }
+		}
+		else
+		{
+			 if(Io_Output1_Dir == 0)
+			 {
+				 gpio_set_val(DO2,GPIO_LEVEL_LOW);
+				 DISP_DO2 = 0;
+			 }
+			 else
+			 {
+				 gpio_set_val(DO2,GPIO_LEVEL_HIGH);
+				 DISP_DO2 = 1;
+			 }
+		}
+	}
+
+
+}
+void CheckMotorAlarm(void)
+{
+	   if(Servo.Pn01.MotorType.Data <= 0)//电机型号错误
+	   {
+		  Err.MotorTypeErrFlag=1;
+	   }
+	   if(Err.MotorTypeErrFlag==1 || Err.CurOverFlag==1 || Err.MainCurRefErrFlag==1 || Err.AbsaCrcErrFlag==1)// 电机型糯砦蟊ň肮鞅ň?编码器通信报警
+	   {
+	      Err.ServoAlarmFlag=1;
+	   }
+
+		 if(IoDi.DI_CCWL == 1 && IoDi.DI_CWL == 1)
+		 {
+				if(Servo.Pn02.CcwCwEnable.Data == 1)
+				{
+					Err.CcwlCwlErrFlag = 1;
+				}
+		 }
+		 if(pos_sum_ek_out > pos_ek_err || pos_sum_ek_out < -pos_ek_err)
+		 {
+				if(Servo.Pn01.PosEkSw.Data==0 &&
+								Servo.Pn01.ContrlMode.Data != CTL_Pt_Psi &&
+								Servo.Pn01.ContrlMode.Data != CTL_Ti &&
+								Servo.Pn01.ContrlMode.Data != CTL_PtTi &&
+				        Servo.Pn01.ContrlMode.Data != CTL_PtTiCheck)
+				{
+					 Err.ServoAlarmFlag=1;   //位置超差报警
+					 Err.PosEkOverErrorFlag=1;
+				}
+		 }
+
+
+		 if(Fn.MotorSpd>Servo.Pn01.SpdMax.Data || Fn.MotorSpd<-Servo.Pn01.SpdMax.Data)
+		 {
+			 Err.ServoAlarmFlag=1;
+			 Err.SpeedHighFlag = 1;
+		 }
+#if 1
+//		 if(gpio_get_val(ioPowerOffIn)==0)//ioPowerOffIn==0主回路掉电
+//		 {
+//			     if(Servo.Pn02.PowerOffErrorIgore.Data == 0)
+//				 {
+//						 if(ioPowerOffInDelay >= 10000)
+//						 {
+//								Err.ServoAlarmFlag=1;
+//								Err.maniPower0ffFlag = 1;//主回路断电报警
+////								gpio_set_val(ioReLayOut,GPIO_LEVEL_HIGH);//继电器断开
+//								IoDo.BRKR = 1;//电机抱闸
+//
+//						 }
+//						 else
+//						 {
+//								ioPowerOffInDelay++;
+//						 }
+//				 }
+//				 else
+//				 {
+//					   ioPowerOffInDelay = 0;
+//				 }
+//		 }
+//		 else
+		 {
+			     ioPowerOffInDelay = 0;
+
+				 if(gpio_get_val(ioPowerHighIn) == 1)
+				 {
+						Err.MainPowerHighCnt++;
+						if(Err.MainPowerHighCnt > Err.MainPowerHighPs)Err.MainPowerHighCnt = Err.MainPowerHighPs + 1;
+				 }
+				 else
+				 {
+						Err.MainPowerHighCnt = 0;
+				 }
+				 if(Err.MainPowerHighCnt>Err.MainPowerHighPs)  //过压报警延时
+				 {
+						Err.ServoAlarmFlag =1;     //过压故障报警
+						Err.MainPowerHighFlag = 1;
+				 }
+
+				 if(Servo.Pn02.TmpSampleSw.Data == 0)
+				 {
+						if(gpio_get_val(ioPowerLowIn) == 1)
+						{
+							  Err.MainPowerLowCnt++;
+							  if(Err.MainPowerLowCnt > Err.MainPowerLowPs)
+							  {
+								Err.MainPowerLowCnt = Err.MainPowerLowPs+1;
+							  }
+						}
+						else
+						{
+							  Err.MainPowerLowCnt = 0;
+						}
+						if(Err.MainPowerLowCnt>Err.MainPowerLowPs)
+						{
+							  Err.ServoAlarmFlag =1;
+							  Err.MainPowerLowFlag=1;
+						}
+				 }
+				 else
+				 {
+					  if(Fn.VdcInputVol <= Servo.Pn04.MainPowerLowVale.Data)
+					  {
+						    Err.MainPowerLowCnt++;
+						    if(Err.MainPowerLowCnt > Err.MainPowerLowPs)
+						    {
+							   Err.MainPowerLowCnt = Err.MainPowerLowPs+1;
+						    }
+					  }
+					  else
+					  {
+							Err.MainPowerLowCnt = 0;
+					  }
+					  if(Err.MainPowerLowCnt>Err.MainPowerLowPs)
+					  {
+							Err.ServoAlarmFlag =1;
+							Err.MainPowerLowFlag=1;
+					  }
+					  if(gpio_get_val(ioPowerLowIn) == 1)
+					  {
+							Err.TempHighCnt++;
+							if(Err.TempHighCnt > Err.TempHighPs)
+							{
+							   Err.TempHighCnt = Err.TempHighPs+1;
+							}
+					  }
+					  else
+					  {
+							Err.TempHighCnt = 0;
+					  }
+					  if(Err.TempHighCnt>Err.TempHighPs)
+					  {
+							Err.ServoAlarmFlag =1;
+							Err.TempHighFlag=1;
+					  }
+                 }
+
+				  if(gpio_get_val(ioBreakErrIn) == 1)
+				  {
+				      Err.BrakeAlarmCnt++;
+				      if(Err.BrakeAlarmCnt > Err.BrakeAlarmPs)Err.BrakeAlarmCnt = Err.BrakeAlarmPs + 1;
+				  }
+				  else
+				  {
+				      Err.BrakeAlarmCnt = 0;
+				  }
+				  if(Err.BrakeAlarmCnt>Err.BrakeAlarmPs)  //制动报警延时
+				  {
+					  Err.ServoAlarmFlag =1;
+					  Err.BrakeAlarmFlag=1;
+				  }
+	   }
+#endif
+
+#if(SDFM_USED == 1)
+
+#else
+	   if(ilg2_vdc1.Imeas_ref_ad0 <= ADC_REF_MIN || ilg2_vdc1.Imeas_ref_ad0 >= ADC_REF_MAX)
+	   {
+			Err.MainCurRefErrFlag = 1;
+	   }
+	   if(ilg2_vdc1.Imeas_ref_ad1 <= ADC_REF_MIN || ilg2_vdc1.Imeas_ref_ad1 >= ADC_REF_MAX)
+	   {
+			Err.MainCurRefErrFlag = 1;
+	   }
+
+#endif
+
+}
