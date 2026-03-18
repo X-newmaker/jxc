@@ -1,0 +1,133 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0" version="29.6.3">
+  <diagram name="第 1 页" id="xpcJxzjAqUNeeajTOixh">
+    <mxGraphModel dx="1546" dy="899" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3300" pageHeight="4681" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="eVErtVW73qCYkt56r8lb-3" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;" target="eVErtVW73qCYkt56r8lb-2" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="72" y="1520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-4" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-5">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="72" y="1416" />
+              <mxPoint x="127" y="1416" />
+            </Array>
+            <mxPoint x="82" y="1377" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="main" vertex="1">
+          <mxGeometry height="34" width="58" x="14" y="1455" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-2" parent="1" style="whiteSpace=wrap;html=1;rounded=1;" value="InitSysCtil();系统硬件初始化" vertex="1">
+          <mxGeometry height="58" width="71" x="136" y="1491" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-9" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0.25;exitY=0;exitDx=0;exitDy=0;" target="eVErtVW73qCYkt56r8lb-8">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="207" y="1387" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-14" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="for主循环" vertex="1">
+          <mxGeometry height="59" width="71" x="136" y="1387" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;rotation=0;" value="motor_para_cala();电流环参数配置，数据分析、处理、存储，位置环速度环PID参数配置" vertex="1">
+          <mxGeometry height="71" width="123" x="232" y="1306" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-16" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-15">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="354" y="1406" />
+              <mxPoint x="374" y="1406" />
+              <mxPoint x="374" y="1369" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-24" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="MainLoop();EtherCat主循环" vertex="1">
+          <mxGeometry height="59" width="122" x="232" y="1387" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="PDO_OutputMapping();Pdo往从站发送指令" vertex="1">
+          <mxGeometry height="60" width="153" x="394" y="1339" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-21" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="eVErtVW73qCYkt56r8lb-20" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-18" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=default;strokeColor=default;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=12;fontColor=default;" value="&lt;div style=&quot;text-align: left;&quot;&gt;ECAT_Application();&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;状态位管理，运动控制函数&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="155" x="394" y="1424" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-19" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=-0.005;entryY=0.56;entryDx=0;entryDy=0;entryPerimeter=0;" target="eVErtVW73qCYkt56r8lb-18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-20" parent="1" style="whiteSpace=wrap;html=1;rounded=1;" value="CIA402_DummyMotionControl(pCiA402Axis);运动控制函数，根据状态字和模式字设置伺服模式标志位，并初始化值和传递值" vertex="1">
+          <mxGeometry height="62" width="272" x="580" y="1422" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=default;strokeColor=default;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=12;fontColor=default;" value="&lt;div style=&quot;text-align: left;&quot;&gt;&lt;span style=&quot;text-align: center;&quot;&gt;PDO_InputMapping();Pdo从从站接受指令&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="155" x="394" y="1501" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-27" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-25" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-25" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="中断" vertex="1">
+          <mxGeometry height="40" width="59" x="239" y="1142" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-29" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-26" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="eVErtVW73qCYkt56r8lb-28" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-26" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="EPWM_IRQHandler_isr(void);定时器中断进入中断函数上电延时管理、系统复位 / 编码器调零处理、电机运行状态（停止 / 运行 / 故障）的逻辑切换、核心控制算法执行（电流采样、编码器读取、闭环控制等），同时记录中断执行时间、清除中断标志以保证下一次中断正常触发。" vertex="1">
+          <mxGeometry height="122" width="338" x="372" y="1101" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-36" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-37" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-38" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="eVErtVW73qCYkt56r8lb-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-28" parent="1" style="whiteSpace=wrap;html=1;rounded=1;" value="MS_RUN();根据模式标志位执行对应的函数" vertex="1">
+          <mxGeometry height="60" width="120" x="747" y="1132" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-30" edge="1" parent="1" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.414;entryY=0.99;entryDx=0;entryDy=0;entryPerimeter=0;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="715.9985714285715" y="1322.6" as="sourcePoint" />
+            <mxPoint x="786.6500000000001" y="1191.9999999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-31" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.414;entryY=0.99;entryDx=0;entryDy=0;entryPerimeter=0;" target="eVErtVW73qCYkt56r8lb-32" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="716" y="1422" as="sourcePoint" />
+            <mxPoint x="806" y="1201" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-32" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="标志位更新" vertex="1">
+          <mxGeometry height="60" width="120" x="667" y="1322" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-40" edge="1" parent="1" source="eVErtVW73qCYkt56r8lb-33" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="eVErtVW73qCYkt56r8lb-39" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-33" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="ESC_Pt();CSP模式" vertex="1">
+          <mxGeometry height="60" width="120" x="929" y="1029" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-34" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="ESC_Si();CSV模式" vertex="1">
+          <mxGeometry height="60" width="120" x="929" y="1132" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-35" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="ESC_Ti();CST模式" vertex="1">
+          <mxGeometry height="60" width="120" x="929" y="1237" as="geometry" />
+        </mxCell>
+        <mxCell id="eVErtVW73qCYkt56r8lb-39" parent="1" style="whiteSpace=wrap;html=1;rounded=1;" value="接收值EscPdo.object607A_PostionTarget" vertex="1">
+          <mxGeometry height="60" width="318" x="1129" y="1029" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
